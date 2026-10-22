@@ -1,284 +1,174 @@
-:root {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  line-height: 1.5;
-  color: #e5eefb;
-  background: #07111f;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+# Access Guardian
 
-* {
-  box-sizing: border-box;
-}
+Access Guardian is an AI-assisted accessibility scanning and remediation platform for web applications. It helps detect accessibility issues, explain their impact, and support safer, code-aware remediation workflows.
 
-html, body, #root {
-  margin: 0;
-  min-height: 100%;
-  min-width: 100%;
-  background: linear-gradient(180deg, #07111f 0%, #0b1628 100%);
-}
+The project is designed around a practical goal: identify common barriers for users with disabilities, gather browser-level evidence, and improve accessibility using a combination of automated checks and structured remediation workflows.
 
-body {
-  min-height: 100vh;
-}
+## Why this project exists
 
-button, input {
-  font: inherit;
-}
+Many websites still fail basic accessibility expectations, including:
 
-.app-shell {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 32px 20px 48px;
-}
+- missing or inadequate alt text
+- unlabeled form controls
+- poor keyboard navigation
+- weak focus styling
+- insufficient color contrast
+- improper semantic structure
+- JavaScript-heavy UI issues that are hard to evaluate manually
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
+Manual audit and remediation are slow and error-prone. Access Guardian aims to reduce that gap by combining automated detection, contextual evidence, and guided remediation.
 
-.eyebrow {
-  margin: 0;
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #8ec5ff;
-}
+## Core idea
 
-h1 {
-  margin: 4px 0 0;
-  font-size: clamp(2rem, 4vw, 2.8rem);
-}
+This repository implements a prototype accessibility engineering workflow:
 
-.toggle-group {
-  display: inline-flex;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  padding: 4px;
-}
+- scan a target web page or application
+- detect accessibility issues
+- capture evidence from browser rendering and DOM state
+- classify and explain findings
+- generate remediation suggestions or code-level fixes
+- verify the result after patching
 
-.toggle-group button {
-  border: none;
-  background: transparent;
-  color: #d3e4ff;
-  border-radius: 999px;
-  padding: 10px 16px;
-  cursor: pointer;
-  transition: 0.2s ease;
-}
+This makes it more than a simple linter: it is intended to support an end-to-end accessibility validation and repair loop.
 
-.toggle-group button.active {
-  background: #7cc5ff;
-  color: #05121b;
-  font-weight: 700;
-}
+## Features
 
-.scan-panel, .card {
-  background: rgba(10, 20, 33, 0.8);
-  border: 1px solid rgba(143, 192, 255, 0.18);
-  border-radius: 18px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
-}
+- Accessibility scanning for web pages
+- Browser-driven evidence collection
+- DOM and accessibility tree inspection
+- Automated issue detection based on accessibility rules
+- Structured findings with contextual reasoning
+- Remediation planning and code-level fix support
+- Verification and regression-oriented workflow
+- Research prototype for AI-assisted accessibility remediation
 
-.scan-panel {
-  padding: 20px;
-}
+## Architecture overview
 
-.input-row {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-}
+The repository is organized around a hybrid system:
 
-.input-row input {
-  flex: 1;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(138, 173, 255, 0.24);
-  background: rgba(255, 255, 255, 0.04);
-  color: #eef5ff;
-}
+- Frontend: React + TypeScript dashboard
+- Backend: Python + FastAPI API service
+- Browser automation: Playwright
+- Rule validation: axe-core and custom checks
+- Remediation layer: structured, auditable fix generation
+- Verification: re-scan, compare before/after behavior, check regressions
 
-.input-row button {
-  border: none;
-  border-radius: 12px;
-  padding: 14px 18px;
-  background: linear-gradient(135deg, #69b7ff 0%, #7ef8d3 100%);
-  color: #041622;
-  font-weight: 700;
-  cursor: pointer;
-}
+## Repository structure
 
-.status-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-}
+```text
+Access-Guardian/
+├── README.md
+├── PROJECT_BLUEPRINT.md
+├── api-contract.yaml
+├── architecture.mmd
+├── dataset-annotation-schema.json
+├── evaluation-plan.md
+├── mongodb-schema.md
+├── timeline.csv
+├── backend/
+│   ├── requirements.txt
+│   └── app/
+│       ├── __init__.py
+│       ├── main.py
+│       ├── database/
+│       │   └── store.py
+│       ├── models/
+│       │   └── schemas.py
+│       ├── routes/
+│       │   ├── findings.py
+│       │   ├── remediation.py
+│       │   └── scans.py
+│       └── services/
+│           ├── playwright_scan.py
+│           └── security.py
+├── frontend/
+│   ├── package.json
+│   ├── index.html
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   ├── vite.config.ts
+│   └── src/
+│       ├── App.tsx
+│       ├── api.ts
+│       ├── index.css
+│       ├── main.tsx
+│       └── types.ts
+└── .gitignore
+```
 
-.status-row > div {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
-}
+## Tech stack
 
-.status-label {
-  color: #9fb7d5;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
+- Python
+- FastAPI
+- React
+- TypeScript
+- Vite
+- Playwright
+- Accessibility testing libraries
+- MongoDB-oriented data model
+- AI/LLM-assisted remediation concepts
 
-.phase-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
+## Getting started
 
-.phase {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
-  color: #a8b9d7;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
+### 1. Clone the repository
 
-.phase.current {
-  background: rgba(117, 197, 255, 0.2);
-  color: #bfe6ff;
-  border: 1px solid rgba(117, 197, 255, 0.35);
-}
+```bash
+git clone https://github.com/Sarva-shakti-Singh/Access-Guardian.git
+cd Access-Guardian
+```
 
-.content-grid {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr;
-  gap: 20px;
-  margin-top: 24px;
-}
+### 2. Start the backend
 
-.card {
-  padding: 20px;
-}
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+uvicorn backend.app.main:app --reload
+```
 
-.card h2 {
-  margin-top: 0;
-}
+### 3. Start the frontend
 
-.finding-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 14px;
-}
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-.finding {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.02);
-}
+## API and project documents
 
-.finding-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-  color: #bfe4ff;
-  font-weight: 700;
-}
+This repo includes project planning and contract documents, including:
 
-.finding p {
-  margin: 0 0 10px;
-  color: #e6eefb;
-}
+- `PROJECT_BLUEPRINT.md` — architecture and technical blueprint
+- `api-contract.yaml` — API contract definition
+- `architecture.mmd` — architecture diagram
+- `evaluation-plan.md` — measurement and evaluation strategy
 
-.finding code,
-.finding pre {
-  display: block;
-  background: rgba(5, 17, 28, 0.85);
-  color: #dcecff;
-  border-radius: 8px;
-  padding: 10px 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
+## Current status
 
-.finding a {
-  color: #7ec5ff;
-  margin-top: 10px;
-  display: inline-block;
-}
+Access Guardian is best described as an early-stage prototype and research project. It is not yet a production-ready commercial accessibility platform, but it provides a solid base for exploring:
 
-.severity-critical {
-  border-color: rgba(255, 110, 110, 0.5);
-}
+- automated accessibility detection
+- browser-based evidence collection
+- remediation planning
+- validation and regression checks
+- AI-assisted accessibility tooling
 
-.severity-serious {
-  border-color: rgba(255, 171, 87, 0.5);
-}
+## Limitations
 
-.history-card {
-  margin-top: 24px;
-}
+- This project is still evolving
+- Some components may be architectural or prototype-only
+- End-to-end deployment may require additional services and configuration
+- AI-assisted remediation should be treated as assistive and reviewed before production use
 
-.history-list {
-  display: grid;
-  gap: 10px;
-}
+## License
 
-.history-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-}
+This repository does not currently specify a license. If you plan to publish or distribute the project publicly, consider adding a license such as MIT or Apache-2.0.
 
-.history-item > div {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
+## Related files
 
-.history-item span {
-  color: #b1c8eb;
-}
-
-.error-box {
-  margin-top: 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(255, 115, 115, 0.12);
-  border: 1px solid rgba(255, 115, 115, 0.3);
-  color: #ffd7d7;
-}
-
-@media (max-width: 800px) {
-  .topbar,
-  .input-row,
-  .history-item {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .content-grid,
-  .status-row {
-    grid-template-columns: 1fr;
-  }
-}
+- `PROJECT_BLUEPRINT.md`
+- `api-contract.yaml`
+- `architecture.mmd`
+- `evaluation-plan.md`
+- `backend/app/routes`
+- `frontend/src`
