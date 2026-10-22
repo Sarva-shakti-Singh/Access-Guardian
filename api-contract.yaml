@@ -1,0 +1,51 @@
+openapi: 3.0.3
+info: {title: Agentic A11y Platform API, version: 0.1.0}
+servers: [{url: http://localhost:8000}]
+paths:
+  /api/v1/scans:
+    post:
+      summary: Create scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ScanCreateRequest'}
+      responses: {'202': {description: accepted}}
+  /api/v1/scans/{scan_id}:
+    get: {summary: Get scan status, parameters: [{$ref: '#/components/parameters/ScanId'}], responses: {'200': {description: status}}}
+  /api/v1/scans/{scan_id}/events:
+    get: {summary: Stream SSE progress, parameters: [{$ref: '#/components/parameters/ScanId'}], responses: {'200': {description: event stream}}}
+  /api/v1/scans/{scan_id}/pages:
+    get: {summary: List route/state records, parameters: [{$ref: '#/components/parameters/ScanId'}], responses: {'200': {description: pages}}}
+  /api/v1/scans/{scan_id}/findings:
+    get: {summary: List findings, parameters: [{$ref: '#/components/parameters/ScanId'}], responses: {'200': {description: findings}}}
+  /api/v1/findings/{finding_id}:
+    get: {summary: Get evidence, parameters: [{$ref: '#/components/parameters/FindingId'}], responses: {'200': {description: finding}}}
+  /api/v1/findings/{finding_id}/remediation:
+    post: {summary: Create remediation proposal, parameters: [{$ref: '#/components/parameters/FindingId'}], responses: {'202': {description: queued}}}
+  /api/v1/remediations/{remediation_id}/approve:
+    post: {summary: Approve sandbox patch, parameters: [{$ref: '#/components/parameters/RemediationId'}], responses: {'202': {description: queued}}}
+  /api/v1/remediations/{remediation_id}/reject:
+    post: {summary: Reject proposal, parameters: [{$ref: '#/components/parameters/RemediationId'}], responses: {'200': {description: recorded}}}
+  /api/v1/remediations/{remediation_id}/verify:
+    post: {summary: Re-run verification, parameters: [{$ref: '#/components/parameters/RemediationId'}], responses: {'202': {description: queued}}}
+  /api/v1/scans/{scan_id}/report:
+    get: {summary: JSON/HTML report, parameters: [{$ref: '#/components/parameters/ScanId'}], responses: {'200': {description: report}}}
+components:
+  parameters:
+    ScanId: {in: path, name: scan_id, required: true, schema: {type: string}}
+    FindingId: {in: path, name: finding_id, required: true, schema: {type: string}}
+    RemediationId: {in: path, name: remediation_id, required: true, schema: {type: string}}
+  schemas:
+    ScanCreateRequest:
+      type: object
+      required: [target_url]
+      properties:
+        target_url: {type: string, format: uri}
+        max_pages: {type: integer, default: 20}
+        max_depth: {type: integer, default: 2}
+        viewport_profiles: {type: array, items: {type: string}, default: [desktop, mobile]}
+        wcag_tags: {type: array, items: {type: string}, default: [wcag2a, wcag2aa, wcag22aa]}
+        enable_vision_review: {type: boolean, default: true}
+        enable_remediation: {type: boolean, default: false}
+        interaction_policy: {type: object}

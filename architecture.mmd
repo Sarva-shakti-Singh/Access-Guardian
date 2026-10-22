@@ -1,0 +1,31 @@
+flowchart LR
+ U[React Dashboard] --> API[FastAPI API]
+ API --> Q[Redis Queue]
+ API --> DB[(MongoDB)]
+ Q --> O[Scan Orchestrator]
+ O --> C[Playwright Crawler]
+ C --> E[Evidence Builder\nDOM CSS AX tree screenshots traces]
+ E --> A[axe-core]
+ E --> P[Custom Probes\nkeyboard focus contrast labels]
+ A --> N[Finding Normalizer\nWCAG mapping + dedupe]
+ P --> N
+ N --> G{Vision escalation?}
+ G -->|No| D[Adjudicator]
+ G -->|Yes| V[Vision-LLM\nstructured JSON]
+ V --> D
+ D --> F[(Findings)]
+ F --> L[LangGraph Remediation]
+ L --> S[Typed Strategy]
+ S --> X[Patch Validator + Diff]
+ X --> H{Approval?}
+ H -->|Reject| R[Human Review]
+ H -->|Approve| B[Disposable Sandbox]
+ B --> W[Verification Runner\nreplay + rescan]
+ W --> K[Before/After + Regression Gate]
+ K --> T[Report / Export]
+ T --> API
+ K -->|retry once| L
+ K -->|rollback| B
+ C --> OBJ[(Object Storage)]
+ E --> OBJ
+ B --> OBJ

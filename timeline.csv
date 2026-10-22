@@ -1,0 +1,17 @@
+week,phase,milestone,deliverable,exit_gate
+1,foundation,scope and literature,WCAG subset and competitor matrix,scope approved
+2,foundation,scaffold,FastAPI MongoDB Redis React skeleton,scan request stored
+3,crawler,route discovery,bounded Playwright crawler,fixture routes discovered
+4,crawler,evidence capture,DOM AX screenshot trace pack,reproducible evidence
+5,detection,axe and probes,normalized findings and WCAG catalog,API returns findings
+6,MVP,scan plus detect,dashboard filters evidence JSON CSV,working MVP
+7,vision,selective escalation,evidence pack and model JSON,contextual finding adjudicated
+8,vision,calibration,threshold and cost logs,review status reliable
+9,remediation,typed fixes I,alt name label strategies,patches generated
+10,remediation,typed fixes II,contrast keyboard focus strategies,validator passes
+11,verification,sandbox apply,disposable patched fixture,site boots
+12,verification,replay and compare,primary checks regression gate,status correct
+13,agent,LangGraph workflow,checkpoint retry approval,workflow resumes safely
+14,full-loop,closed-loop benchmark,scan detect patch verify report,full-loop gate
+15,evaluation,ablations and metrics,held-out results plots,evaluation complete
+16,demo,dissertation and demo,before-after lab and final report,final package
