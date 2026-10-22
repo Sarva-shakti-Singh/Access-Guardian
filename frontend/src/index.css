@@ -68,6 +68,7 @@ function App() {
         const latest = items.find((item: ScanRecord) => item.scan_id === scan.scan_id) || scan;
         setScan(latest);
         setStatus(latest.status as ScanStatus);
+
         if (latest.status === 'complete' || latest.status === 'failed') {
           const nextFindings = await fetchFindings(latest.scan_id);
           setFindings(nextFindings);
@@ -87,6 +88,7 @@ function App() {
 
   const handleScan = async () => {
     setError('');
+
     if (mode === 'sample') {
       setStatus('complete');
       setFindings(sampleFindings);
@@ -106,6 +108,7 @@ function App() {
 
     setIsScanning(true);
     setStatus('queued');
+
     try {
       const result = await createScan(targetUrl);
       setScan(result);
@@ -144,7 +147,9 @@ function App() {
             onChange={(e) => setTargetUrl(e.target.value)}
             placeholder="https://example.com"
           />
-          <button onClick={handleScan} disabled={isScanning}>{isScanning ? 'Scanning...' : 'Run scan'}</button>
+          <button onClick={handleScan} disabled={isScanning}>
+            {isScanning ? 'Scanning...' : 'Run scan'}
+          </button>
         </div>
 
         <div className="status-row">
@@ -164,11 +169,13 @@ function App() {
 
         {error && <div className="error-box">{error}</div>}
 
-        {statusOrder.map((phase) => (
-          <span key={phase} className={`phase ${status === phase ? 'current' : ''}`}>
-            {phase}
-          </span>
-        ))}
+        <div className="phase-row">
+          {statusOrder.map((phase) => (
+            <span key={phase} className={`phase ${status === phase ? 'current' : ''}`}>
+              {phase}
+            </span>
+          ))}
+        </div>
       </section>
 
       <main className="content-grid">
@@ -194,7 +201,11 @@ function App() {
                   <p>{finding.message}</p>
                   <code>{finding.selector || 'selector unavailable'}</code>
                   {finding.html_snippet && <pre>{finding.html_snippet}</pre>}
-                  {finding.help_url && <a href={finding.help_url} target="_blank" rel="noreferrer">More info</a>}
+                  {finding.help_url && (
+                    <a href={finding.help_url} target="_blank" rel="noreferrer">
+                      More info
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
