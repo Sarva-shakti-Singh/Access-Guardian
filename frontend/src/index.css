@@ -1,0 +1,230 @@
+import { useEffect, useRef, useState } from 'react';
+import { createScan, fetchFindings, fetchScans } from './api';
+import type { Finding, ScanRecord, ScanStatus } from './types';
+
+const sampleFindings: Finding[] = [
+  {
+    finding_id: 'sample-1',
+    scan_id: 'sample',
+    rule_id: 'image-alt',
+    wcag: ['1.1.1'],
+    severity: 'critical',
+    message: 'Images must have alternate text',
+    selector: 'main .hero img',
+    html_snippet: '<img src="/hero.jpg" />',
+    help_url: 'https://dequeuniversity.com/rules/axe/image-alt',
+    page_url: 'https://example.com',
+    status: 'open',
+    source: 'sample',
+  },
+  {
+    finding_id: 'sample-2',
+    scan_id: 'sample',
+    rule_id: 'label',
+    wcag: ['3.3.2'],
+    severity: 'serious',
+    message: 'Form elements must have labels',
+    selector: 'form input[type="email"]',
+    html_snippet: '<input type="email" />',
+    help_url: 'https://dequeuniversity.com/rules/axe/label',
+    page_url: 'https://example.com',
+    status: 'open',
+    source: 'sample',
+  },
+];
+
+const statusOrder: ScanStatus[] = ['queued', 'crawling', 'analyzing', 'complete', 'failed'];
+
+function App() {
+  const [mode, setMode] = useState<'sample' | 'live'>('sample');
+  const [targetUrl, setTargetUrl] = useState('https://www.w3.org/WAI/');
+  const [status, setStatus] = useState<ScanStatus>('queued');
+  const [scan, setScan] = useState<ScanRecord | null>(null);
+  const [findings, setFindings] = useState<Finding[]>(sampleFindings);
+  const [history, setHistory] = useState<ScanRecord[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [error, setError] = useState('');
+  const pollingRef = useRef<number | null>(null);
+
+  const refreshHistory = async () => {
+    try {
+      const items = await fetchScans();
+      setHistory(items);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    refreshHistory();
+  }, []);
+
+  useEffect(() => {
+    if (!isScanning || !scan) return;
+
+    pollingRef.current = window.setInterval(async () => {
+      try {
+        const items = await fetchScans();
+        const latest = items.find((item: ScanRecord) => item.scan_id === scan.scan_id) || scan;
+        setScan(latest);
+        setStatus(latest.status as ScanStatus);
+        if (latest.status === 'complete' || latest.status === 'failed') {
+          const nextFindings = await fetchFindings(latest.scan_id);
+          setFindings(nextFindings);
+          setIsScanning(false);
+          if (pollingRef.current) window.clearInterval(pollingRef.current);
+          await refreshHistory();
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }, 1500);
+
+    return () => {
+      if (pollingRef.current) window.clearInterval(pollingRef.current);
+    };
+  }, [isScanning, scan]);
+
+  const handleScan = async () => {
+    setError('');
+    if (mode === 'sample') {
+      setStatus('complete');
+      setFindings(sampleFindings);
+      setScan({
+        scan_id: 'sample-run',
+        target_url: targetUrl,
+        status: 'complete',
+        title: 'Sample demo report',
+        pages_scanned: 1,
+        score: 69,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        findings: sampleFindings,
+      });
+      return;
+    }
+
+    setIsScanning(true);
+    setStatus('queued');
+    try {
+      const result = await createScan(targetUrl);
+      setScan(result);
+      setStatus(result.status as ScanStatus);
+      setFindings(result.findings || []);
+      await refreshHistory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Scan failed');
+      setIsScanning(false);
+    }
+  };
+
+  const score = scan?.score ?? 100;
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">A11yLens</p>
+          <h1>Access Guardian</h1>
+        </div>
+        <div className="toggle-group">
+          <button className={mode === 'sample' ? 'active' : ''} onClick={() => setMode('sample')}>
+            Sample Demo Mode
+          </button>
+          <button className={mode === 'live' ? 'active' : ''} onClick={() => setMode('live')}>
+            Live Scan Mode
+          </button>
+        </div>
+      </header>
+
+      <section className="scan-panel">
+        <div className="input-row">
+          <input
+            value={targetUrl}
+            onChange={(e) => setTargetUrl(e.target.value)}
+            placeholder="https://example.com"
+          />
+          <button onClick={handleScan} disabled={isScanning}>{isScanning ? 'Scanning...' : 'Run scan'}</button>
+        </div>
+
+        <div className="status-row">
+          <div>
+            <span className="status-label">Status</span>
+            <strong>{status}</strong>
+          </div>
+          <div>
+            <span className="status-label">Score</span>
+            <strong>{score}/100</strong>
+          </div>
+          <div>
+            <span className="status-label">Findings</span>
+            <strong>{findings.length}</strong>
+          </div>
+        </div>
+
+        {error && <div className="error-box">{error}</div>}
+
+        {statusOrder.map((phase) => (
+          <span key={phase} className={`phase ${status === phase ? 'current' : ''}`}>
+            {phase}
+          </span>
+        ))}
+      </section>
+
+      <main className="content-grid">
+        <section className="card">
+          <h2>Scan summary</h2>
+          <p>{scan?.title || 'No live scan has run yet.'}</p>
+          <p>{scan?.target_url || targetUrl}</p>
+          <p>Pages scanned: {scan?.pages_scanned ?? 1}</p>
+        </section>
+
+        <section className="card">
+          <h2>Issue list</h2>
+          {findings.length === 0 ? (
+            <p>No findings detected.</p>
+          ) : (
+            <ul className="finding-list">
+              {findings.map((finding) => (
+                <li key={finding.finding_id} className={`finding severity-${finding.severity}`}>
+                  <div className="finding-header">
+                    <span>{finding.rule_id}</span>
+                    <span>{finding.severity}</span>
+                  </div>
+                  <p>{finding.message}</p>
+                  <code>{finding.selector || 'selector unavailable'}</code>
+                  {finding.html_snippet && <pre>{finding.html_snippet}</pre>}
+                  {finding.help_url && <a href={finding.help_url} target="_blank" rel="noreferrer">More info</a>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </main>
+
+      <section className="card history-card">
+        <h2>Scan history</h2>
+        <div className="history-list">
+          {history.length === 0 ? (
+            <p>No scans yet.</p>
+          ) : (
+            history.map((item) => (
+              <div key={item.scan_id} className="history-item">
+                <div>
+                  <strong>{item.title || 'Live scan'}</strong>
+                  <span>{item.target_url}</span>
+                </div>
+                <div>
+                  <span>{item.status}</span>
+                  <span>{item.score}/100</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export default App;

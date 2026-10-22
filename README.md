@@ -1,13 +1,50 @@
-# Agentic A11y Platform Blueprint
+# Access Guardian
 
-This ZIP contains a build-ready academic project plan for a WCAG scanning, vision-LLM reasoning, code-remediation, and verification platform.
+This repository now contains a working prototype of the Access Guardian accessibility scanning platform.
 
-- `PROJECT_BLUEPRINT.md` — full synopsis and implementation plan.
-- `architecture.mmd` — Mermaid architecture diagram source.
-- `api-contract.yaml` — endpoint contract.
-- `mongodb-schema.md` — collections/indexes.
-- `dataset-annotation-schema.json` — corpus labels.
-- `evaluation-plan.md` — experiment design.
-- `timeline.csv` — 16-week schedule.
+## What is included
 
-This is a research prototype, not legal certification. Automated checks cover a defined subset; full conformance requires human and assistive-technology testing.
+- Python FastAPI backend with scan endpoints
+- Playwright-based live URL scan service
+- axe-core accessibility analysis
+- In-memory MongoDB-style storage abstraction for scans and findings
+- React + Vite frontend with sample demo/live mode toggle
+- Security validation for public HTTP/HTTPS targets
+
+## Quick start
+
+### 1) Backend
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m playwright install chromium
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 2) Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev -- --host 0.0.0.0 --port 5173
+```
+
+Then open the local Vite URL and use the live scan mode to scan a public website.
+
+## API
+
+- POST /api/scans
+- GET /api/scans
+- GET /api/scans/{scan_id}
+- GET /api/scans/{scan_id}/findings
+- POST /api/findings/{finding_id}/remediate
+- POST /api/scans/{scan_id}/verify
+
+## Notes
+
+- This is a research-grade prototype, not a production accessibility certification service.
+- The live scan path uses a strict allowlist for public URLs and blocks private/localhost addresses.
+- The sample mode remains available as a fallback for demos.
