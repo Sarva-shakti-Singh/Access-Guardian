@@ -1,0 +1,89 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Setup backend",
+      "type": "shell",
+      "command": "python3 -m venv .venv && .venv/bin/python -m pip install -r backend/requirements.txt && .venv/bin/python -m playwright install chromium && (test -f .env || cp .env.example .env)",
+      "windows": {
+        "command": "py -m venv .venv; .\\.venv\\Scripts\\python -m pip install -r backend/requirements.txt; .\\.venv\\Scripts\\python -m playwright install chromium; if (!(Test-Path .env)) { Copy-Item .env.example .env }"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Setup frontend",
+      "type": "shell",
+      "command": "npm install",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Setup (first run)",
+      "dependsOn": [
+        "Setup backend",
+        "Setup frontend"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "Start backend",
+      "type": "shell",
+      "command": ".venv/bin/python -m uvicorn backend.app.main:app",
+      "windows": {
+        "command": ".\\.venv\\Scripts\\python -m uvicorn backend.app.main:app"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Started server",
+          "endsPattern": "Uvicorn running"
+        }
+      },
+      "presentation": {
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Start frontend",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "Local:"
+        }
+      },
+      "presentation": {
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Start all",
+      "dependsOn": [
+        "Start backend",
+        "Start frontend"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}

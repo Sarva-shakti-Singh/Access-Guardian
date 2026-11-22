@@ -1,0 +1,405 @@
+openapi: 3.0.3
+info:
+  title: Access Guardian API
+  version: 0.2.0
+  description: >-
+    Local accessibility scanning API. Automated findings are limited checks and
+    do not establish WCAG conformance. This API has no authentication.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /:
+    get:
+      summary: Service liveness
+      responses:
+        '200':
+          description: Service is running
+  /api/health:
+    get:
+      summary: Liveness health check
+      responses:
+        '200':
+          description: API process is responsive
+  /api/ready:
+    get:
+      summary: Database readiness check
+      responses:
+        '200':
+          description: Database is available
+        '503':
+          description: Database is unavailable
+  /api/agent/status:
+    get:
+      summary: Report whether the optional AI source-fix provider is configured
+      responses:
+        '200':
+          description: Configuration status, provider destination, and model name; no API secret is returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIFixStatus'
+  /api/agent/fix:
+    post:
+      summary: Request a constrained source-element proposal from the configured AI provider
+      description: >-
+        Requires explicit client attestation that the user approved sharing this source context.
+        Sends the supplied snippet to the configured model provider and never writes source files.
+        The VS Code extension uses this endpoint only after explicit consent, then independently
+        previews the full-file diff and requires user approval before editing a selected workspace range.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIFixRequest'
+      responses:
+        '200':
+          description: Proposed replacement string returned by the AI provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIFixResponse'
+        '409':
+          description: Provider destination changed after the extension obtained user consent
+        '422':
+          description: Invalid or unsupported source-fix request
+        '503':
+          description: AI provider is not configured
+  /api/scans:
+    get:
+      summary: List recent persisted scans
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+      responses:
+        '200':
+          description: Scans, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ScanRecord'}
+    post:
+      summary: Queue a bounded public-site scan
+      description: >-
+        Only public HTTP(S) targets and configured ports are accepted. Crawling
+        stays same-origin, and only safe links are followed; forms are not
+        submitted. Query strings are not persisted. Optional AI vision analysis
+        is disabled by default and requires explicit consent; AI observations
+        are potential findings and do not establish WCAG conformance.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ScanCreateRequest'}
+      responses:
+        '202':
+          description: Scan accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ScanRecord'}
+        '400':
+          description: Unsafe or invalid target URL
+        '422':
+          description: Request schema or scan limit is invalid
+        '429':
+          description: Rate or scanner concurrency limit reached
+  /api/scans/{scan_id}:
+    get:
+      summary: Retrieve scan status and persisted results
+      parameters:
+        - {$ref: '#/components/parameters/ScanId'}
+      responses:
+        '200':
+          description: Scan record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ScanRecord'}
+        '404':
+          description: Scan not found
+  /api/scans/{scan_id}/cancel:
+    post:
+      summary: Request cancellation of an active scan
+      parameters:
+        - {$ref: '#/components/parameters/ScanId'}
+      responses:
+        '200':
+          description: Cancellation requested
+        '404':
+          description: Scan not found
+        '409':
+          description: Scan is no longer cancellable
+  /api/scans/{scan_id}/findings:
+    get:
+      summary: List findings for a scan
+      parameters:
+        - {$ref: '#/components/parameters/ScanId'}
+      responses:
+        '200':
+          description: Findings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Finding'}
+  /api/scans/{scan_id}/remediations:
+    get:
+      summary: List stored fix proposals for a scan
+      description: Proposals are for developer review only; source files are never modified.
+      parameters:
+        - {$ref: '#/components/parameters/ScanId'}
+      responses:
+        '200':
+          description: Stored proposals and their review decisions
+        '404':
+          description: Scan not found
+  /api/scans/{scan_id}/pages/{page_index}/screenshot:
+    get:
+      summary: Retrieve a captured page screenshot
+      parameters:
+        - {$ref: '#/components/parameters/ScanId'}
+        - in: path
+          name: page_index
+          required: true
+          schema: {type: integer, minimum: 0}
+      responses:
+        '200':
+          description: PNG evidence image
+          content:
+            image/png: {}
+        '404':
+          description: Screenshot not found
+  /api/scans/{scan_id}/verify:
+    post:
+      summary: Return a cautious automated scan status summary
+      parameters:
+        - {$ref: '#/components/parameters/ScanId'}
+      responses:
+        '200':
+          description: Always requires human review; not a conformance result
+        '404':
+          description: Scan not found
+        '409':
+          description: Scan is not finished
+  /api/findings:
+    get:
+      summary: Search and filter persisted findings
+      parameters:
+        - in: query
+          name: scan_id
+          schema: {type: string}
+        - in: query
+          name: severity
+          schema: {type: string, maxLength: 20}
+        - in: query
+          name: source
+          schema: {type: string, maxLength: 40}
+        - in: query
+          name: q
+          schema: {type: string, maxLength: 120}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 500, default: 200}
+      responses:
+        '200':
+          description: Matching findings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Finding'}
+  /api/findings/{finding_id}:
+    get:
+      summary: Retrieve a finding
+      parameters:
+        - in: path
+          name: finding_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Finding record
+        '404':
+          description: Finding not found
+  /api/findings/{finding_id}/remediate:
+    post:
+      summary: Generate a bounded AI proposal after explicit context-sharing consent
+      description: This endpoint generates and stores a proposal only. It never writes application source.
+      parameters:
+        - in: path
+          name: finding_id
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [consent_to_send_context]
+              properties:
+                consent_to_send_context: {type: boolean, enum: [true]}
+      responses:
+        '200':
+          description: Proposed source element stored for human review; no source files changed
+        '404':
+          description: Finding not found
+        '422':
+          description: Missing consent, unsupported finding, or unsafe provider response
+        '503':
+          description: AI provider is not configured
+  /api/remediations/{remediation_id}:
+    get:
+      summary: Retrieve a stored AI proposal and its review status
+      parameters:
+        - in: path
+          name: remediation_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Remediation record
+        '404':
+          description: Remediation not found
+  /api/remediations/{remediation_id}/decision:
+    post:
+      summary: Record acceptance for local review or rejection of a proposal
+      description: Acceptance is a review decision only; this API does not write source files.
+      parameters:
+        - {$ref: '#/components/parameters/RemediationId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision]
+              properties:
+                decision: {type: string, enum: [accept, reject]}
+      responses:
+        '200':
+          description: Stored human decision
+        '404':
+          description: Remediation not found
+  /api/remediations/{remediation_id}/verification:
+    get:
+      summary: Retrieve a human-review reminder if one exists
+      parameters:
+        - {$ref: '#/components/parameters/RemediationId'}
+      responses:
+        '200':
+          description: A review reminder; never an automated verification claim
+        '404':
+          description: Remediation or reminder not found
+    post:
+      summary: Create a human-review reminder, not an automated verification
+      parameters:
+        - {$ref: '#/components/parameters/RemediationId'}
+      responses:
+        '200':
+          description: Review reminder persisted
+        '404':
+          description: Remediation not found
+        '409':
+          description: Associated scan is still active
+components:
+  parameters:
+    ScanId:
+      in: path
+      name: scan_id
+      required: true
+      schema: {type: string}
+    RemediationId:
+      in: path
+      name: remediation_id
+      required: true
+      schema: {type: string}
+  schemas:
+    AIFixStatus:
+      type: object
+      properties:
+        configured: {type: boolean}
+        provider: {type: string, nullable: true, description: Sanitized provider endpoint; no credential}
+        model: {type: string, nullable: true}
+    AIFixRequest:
+      type: object
+      additionalProperties: false
+      required: [consent_to_send_context, rule_id, message, element, expected_provider, expected_model]
+      properties:
+        consent_to_send_context: {type: boolean, enum: [true]}
+        rule_id: {type: string, maxLength: 80}
+        message: {type: string, maxLength: 1000}
+        element: {type: string, maxLength: 5000}
+        context: {type: string, maxLength: 2000}
+        expected_provider: {type: string, maxLength: 500}
+        expected_model: {type: string, maxLength: 200}
+    AIFixResponse:
+      type: object
+      properties:
+        replacement: {type: string, minLength: 1, maxLength: 5000}
+    ScanCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [target_url]
+      properties:
+        target_url: {type: string, minLength: 8, maxLength: 2048}
+        max_pages: {type: integer, minimum: 1, maximum: 10, default: 1}
+        max_depth: {type: integer, minimum: 0, maximum: 3, default: 1}
+        timeout_seconds: {type: integer, minimum: 5, maximum: 60, default: 20}
+        mode: {type: string, enum: [live], default: live}
+        analyze_with_ai: {type: boolean, default: false}
+        consent_to_ai_analysis:
+          type: boolean
+          nullable: true
+          description: Must be true when analyze_with_ai is true.
+    ScanRecord:
+      type: object
+      properties:
+        scan_id: {type: string}
+        target_url: {type: string}
+        status: {type: string, enum: [queued, crawling, analyzing, complete, partial, failed, cancelled]}
+        title: {type: string, nullable: true}
+        page_url: {type: string, nullable: true}
+        pages_scanned: {type: integer}
+        score: {type: integer, nullable: true, description: Always null; no conformance score is computed}
+        ai_analysis_status:
+          type: string
+          enum: [disabled, pending, complete, partial, unavailable]
+        findings:
+          type: array
+          items: {$ref: '#/components/schemas/Finding'}
+        pages:
+          type: array
+          items:
+            type: object
+            properties:
+              url: {type: string}
+              title: {type: string}
+              status: {type: string}
+              screenshot_available: {type: boolean}
+        errors:
+          type: array
+          items: {type: string}
+    Finding:
+      type: object
+      properties:
+        finding_id: {type: string}
+        scan_id: {type: string}
+        rule_id: {type: string}
+        wcag:
+          type: array
+          items: {type: string}
+        severity: {type: string, enum: [critical, serious, moderate, minor, unknown]}
+        message: {type: string}
+        selector: {type: string, nullable: true}
+        html_snippet: {type: string, nullable: true}
+        page_url: {type: string}
+        source: {type: string}
+        confidence: {type: string, enum: [confirmed, potential]}
+        title: {type: string, nullable: true}
+        category: {type: string, nullable: true}
+        evidence: {type: object}
+        screenshot_available: {type: boolean}

@@ -1,0 +1,45 @@
+{
+  "name": "access-guardian-fix-assistant",
+  "displayName": "Access Guardian Fix Assistant",
+  "description": "Prepare accessibility fixes for developer-selected HTML with an approval-gated diff.",
+  "version": "0.1.0",
+  "publisher": "access-guardian",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:accessGuardian.prepareFix",
+    "onCommand:accessGuardian.applyReviewedFix",
+    "onCommand:accessGuardian.rejectReviewedFix"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "accessGuardian.prepareFix",
+        "title": "Access Guardian: Prepare AI Fix for Selected HTML"
+      },
+      {
+        "command": "accessGuardian.applyReviewedFix",
+        "title": "Access Guardian: Apply Reviewed Fix"
+      },
+      {
+        "command": "accessGuardian.rejectReviewedFix",
+        "title": "Access Guardian: Reject Reviewed Fix"
+      }
+    ],
+    "configuration": {
+      "title": "Access Guardian",
+      "properties": {
+        "accessGuardian.apiBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8000",
+          "description": "Access Guardian API URL. HTTP is allowed only on localhost; remote services must use HTTPS."
+        }
+      }
+    }
+  }
+}
