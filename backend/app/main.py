@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, Response
-from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
 
-from .config import get_settings, load_dotenv
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from .config import ROOT, get_settings, load_dotenv
 
 load_dotenv()
 
@@ -13,7 +17,7 @@ from .routes import findings, remediation, scans  # noqa: E402
 app = FastAPI(
     title="Access Guardian API",
     version="0.2.0",
-    description="Local accessibility scanning API. Automated findings are limited checks and do not "
+    description="Accessibility scanning API. Automated findings are limited checks and do not "
                 "establish WCAG conformance. This API has no authentication.",
 )
 
@@ -24,6 +28,10 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+FRONTEND_DIST = ROOT / "frontend" / "dist"
+if FRONTEND_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+
 
 @app.on_event("startup")
 def _startup() -> None:
@@ -32,6 +40,9 @@ def _startup() -> None:
 
 @app.get("/")
 def root():
+    index = FRONTEND_DIST / "index.html"
+    if index.is_file():
+        return FileResponse(index)
     return {"service": "access-guardian", "status": "running", "docs": "/docs"}
 
 
@@ -51,3 +62,13 @@ def ready(response: Response):
 app.include_router(scans.router)
 app.include_router(findings.router)
 app.include_router(remediation.router)
+
+
+@app.get("/{path:path}", include_in_schema=False)
+def frontend_route(path: str):
+    if path == "api" or path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found")
+    index = FRONTEND_DIST / "index.html"
+    if index.is_file():
+        return FileResponse(index)
+    raise HTTPException(status_code=404, detail="Not found")
