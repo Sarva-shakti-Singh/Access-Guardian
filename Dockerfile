@@ -14,7 +14,9 @@ ENV PYTHONUNBUFFERED=1 \
     ACCESS_GUARDIAN_AXE_PATH=/app/frontend/node_modules/axe-core/axe.min.js
 WORKDIR /app
 COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libatomic1 \
+    && pip install --no-cache-dir -r backend/requirements.txt \
     && python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 COPY backend/ ./backend/
