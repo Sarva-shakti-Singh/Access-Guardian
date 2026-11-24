@@ -11,6 +11,9 @@
     "Other"
   ],
   "main": "./extension.js",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
   "activationEvents": [
     "onCommand:accessGuardian.prepareFix",
     "onCommand:accessGuardian.applyReviewedFix",
@@ -34,10 +37,16 @@
     "configuration": {
       "title": "Access Guardian",
       "properties": {
+        "accessGuardian.backendUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8000",
+          "description": "Access Guardian API URL. HTTP is allowed only for localhost; remote services must use HTTPS."
+        },
         "accessGuardian.apiBaseUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8000",
-          "description": "Access Guardian API URL. HTTP is allowed only on localhost; remote services must use HTTPS."
+          "markdownDeprecationMessage": "**Deprecated:** use `accessGuardian.backendUrl` instead.",
+          "description": "Legacy Access Guardian API URL. Prefer accessGuardian.backendUrl."
         }
       }
     }

@@ -65,6 +65,25 @@ paths:
           description: Invalid or unsupported source-fix request
         '503':
           description: AI provider is not configured
+  /api/agent/verify:
+    post:
+      summary: Verify one modified HTML element with local axe-core
+      description: Runs no AI provider and modifies no source files. The result requires human review.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIVerifyRequest'
+      responses:
+        '200':
+          description: Resolved, partially resolved, unresolved, or inconclusive evidence
+          content:
+            application/json:
+              schema:
+                {$ref: '#/components/schemas/AIVerifyResponse'}
+        '422':
+          description: Unsupported rule or unsafe HTML element
   /api/scans:
     get:
       summary: List recent persisted scans
@@ -340,6 +359,25 @@ components:
       type: object
       properties:
         replacement: {type: string, minLength: 1, maxLength: 5000}
+    AIVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [rule_id, element]
+      properties:
+        rule_id: {type: string, minLength: 1, maxLength: 80}
+        element: {type: string, minLength: 1, maxLength: 5000}
+    AIVerifyResponse:
+      type: object
+      additionalProperties: false
+      required: [status, outcome, rule_id, message, remaining_violations, remaining_incomplete, human_review_required]
+      properties:
+        status: {type: string, enum: [complete, inconclusive]}
+        outcome: {type: string, enum: [resolved, partially_resolved, unresolved, inconclusive]}
+        rule_id: {type: string}
+        message: {type: string}
+        remaining_violations: {type: integer, minimum: 0}
+        remaining_incomplete: {type: integer, minimum: 0}
+        human_review_required: {type: boolean, enum: [true]}
     ScanCreateRequest:
       type: object
       additionalProperties: false

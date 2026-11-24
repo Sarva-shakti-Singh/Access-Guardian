@@ -4,10 +4,19 @@ from fastapi import APIRouter, HTTPException
 
 from ..config import get_settings
 from ..database.store import ACTIVE, Store, get_store
-from ..models.schemas import AIFixRequest, AIFixResponse, AIFixStatus, DecisionRequest, RemediateRequest
+from ..models.schemas import (
+    AIFixRequest,
+    AIFixResponse,
+    AIFixStatus,
+    AIVerifyRequest,
+    AIVerifyResponse,
+    DecisionRequest,
+    RemediateRequest,
+)
 from ..models.serializers import remediation_record
 from ..services.ai import fix
-from ..services.ai.provider import AIError, sanitize_provider
+from ..services.ai.provider import AIError, check_provider_url, sanitize_provider
+from ..services.ai.verify import VerificationError, verify_element
 from ..services.security import UnsafeTarget, validate_target
 from .scans import check_scan_capacity, submit_scan
 
@@ -16,19 +25,36 @@ router = APIRouter(tags=["remediation"])
 
 def _provider():
     s = get_settings()
-    if not (s.ai_base_url and s.ai_model):
-        raise HTTPException(503, "AI provider is not configured")
+    if not s.ai_base_url.strip():
+        raise HTTPException(503, "ACCESS_GUARDIAN_AI_BASE_URL is missing")
+    if not s.ai_model.strip():
+        raise HTTPException(503, "ACCESS_GUARDIAN_AI_MODEL is missing")
+    try:
+        check_provider_url(s.ai_base_url)
+    except AIError as exc:
+        raise HTTPException(503, str(exc)) from exc
     return s
 
 
 @router.get("/api/agent/status", response_model=AIFixStatus)
 def agent_status():
     s = get_settings()
-    configured = bool(s.ai_base_url and s.ai_model)
+    configuration_error = None
+    if not s.ai_base_url.strip():
+        configuration_error = "ACCESS_GUARDIAN_AI_BASE_URL is missing"
+    elif not s.ai_model.strip():
+        configuration_error = "ACCESS_GUARDIAN_AI_MODEL is missing"
+    else:
+        try:
+            check_provider_url(s.ai_base_url)
+        except AIError as exc:
+            configuration_error = str(exc)
+    configured = configuration_error is None
     return AIFixStatus(
         configured=configured,
         provider=sanitize_provider(s.ai_base_url) if configured else None,
         model=s.ai_model if configured else None,
+        configuration_error=configuration_error,
     )
 
 
@@ -51,6 +77,14 @@ def agent_fix(req: AIFixRequest):
     if req.rule_id not in fix.SUPPORTED_RULES:
         raise HTTPException(422, "Rule is not supported for automated proposals")
     return AIFixResponse(replacement=_propose(s, req.rule_id, req.message, req.element, req.context))
+
+
+@router.post("/api/agent/verify", response_model=AIVerifyResponse)
+def agent_verify(req: AIVerifyRequest):
+    try:
+        return AIVerifyResponse(**verify_element(req.rule_id, req.element))
+    except VerificationError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.post("/api/findings/{finding_id}/remediate")

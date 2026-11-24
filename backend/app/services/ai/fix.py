@@ -35,11 +35,22 @@ class _FirstTag(HTMLParser):
 
 def _split(element: str) -> tuple[str, dict, str]:
     s = element.strip()
+    if len(s) > 5000:
+        raise AIError("Element has an invalid length")
     p = _FirstTag()
     p.feed(s)
     if not p.tag or not p.raw or not s.startswith(p.raw):
         raise AIError("Element must start with an HTML start tag")
-    return p.tag, p.attrs, s[len(p.raw):]
+    if p.tag in {"script", "style", "iframe", "object", "embed"}:
+        raise AIError("Executable or embedded HTML elements cannot be remediated")
+    rest = s[len(p.raw):]
+    void_tags = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+    if p.tag in void_tags:
+        if rest.strip():
+            raise AIError("Element contains content after a void HTML tag")
+    elif not rest.strip().lower().endswith(f"</{p.tag}>"):
+        raise AIError("Element must include its closing tag")
+    return p.tag, p.attrs, rest
 
 
 def validate_replacement(original: str, replacement: str) -> str:
@@ -57,6 +68,8 @@ def validate_replacement(original: str, replacement: str) -> str:
     for k in ALLOWED_ATTRS:
         new = n_attrs.get(k)
         if new is None:
+            if o_attrs.get(k) is not None:
+                raise AIError("Replacement removed an existing accessible-name attribute")
             continue
         if len(new) > 150 or "<" in new or ">" in new or not new.strip():
             raise AIError("Replacement attribute value is not acceptable")
