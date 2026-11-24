@@ -11,13 +11,9 @@ This extension sends one developer-selected HTML element to the existing Access 
 
 ## Install or develop locally
 
-1. Open the Access Guardian repository in VS Code.
-2. Run **Tasks: Run Task** and select **Setup (first run)**, or configure the backend manually.
-3. Configure the backend URL:
-   - Open VS Code Settings.
-   - Set `accessGuardian.backendUrl` to `http://127.0.0.1:8000` for local development.
-   - For remote backends, use HTTPS.
-4. Start the backend:
+1. Open the repository and run **Tasks: Run Task** -> **Setup (first run)**.
+2. Set `accessGuardian.backendUrl` to `http://127.0.0.1:8000` for local development, or use HTTPS for remote backends.
+3. Start the backend:
 
 ```bash
 .venv/bin/python -m uvicorn backend.app.main:app
@@ -25,11 +21,11 @@ This extension sends one developer-selected HTML element to the existing Access 
 
 On Windows, use `.venv\Scripts\python.exe -m uvicorn backend.app.main:app`.
 
-5. Open **Run and Debug**, select **Access Guardian Extension**, and press F5. An Extension Development Host window opens.
+4. Open **Run and Debug**, select **Access Guardian Extension**, and press F5.
 
-## Configure AI
+## AI configuration
 
-Set these variables in `.env` and restart the backend:
+Set and restart:
 
 ```dotenv
 ACCESS_GUARDIAN_AI_BASE_URL=http://127.0.0.1:11434/v1
@@ -37,64 +33,47 @@ ACCESS_GUARDIAN_AI_MODEL=qwen2.5-coder:7b
 ACCESS_GUARDIAN_AI_API_KEY=
 ```
 
-The extension never stores or sends API keys. They remain on the backend.
+The extension never receives or stores API keys.
 
 ## Commands
 
-### Access Guardian: Prepare AI Fix for Selected HTML
+- **Access Guardian: Prepare AI Fix for Selected HTML** — validate a saved workspace document and one complete element, ask for rule/context, confirm provider/model, request a fix, and open a diff.
+- **Access Guardian: Apply Reviewed Fix** — apply only to an unchanged open, saved document and exact original range.
+- **Access Guardian: Reject Reviewed Fix** — discard the waiting proposal without editing.
 
-1. Open and save an HTML/source file in the current workspace.
-2. Select exactly one complete HTML element.
-3. Run the command from the Command Palette.
-4. Choose the finding rule and enter the finding description.
-5. Review the provider/model and explicitly choose **Send to AI**.
-6. Review the native VS Code diff.
-7. Choose **Apply Fix**, **Reject Fix**, or **Review Changes**.
+## Consent, privacy, and safety
 
-### Access Guardian: Apply Reviewed Fix
+- One selected element and short finding text are sent after a modal consent prompt.
+- The workspace, unrelated files, terminal, and credentials are not read or transmitted.
+- Provider/model are checked by `GET /api/agent/status` and rechecked during `POST /api/agent/fix` by the backend.
+- HTTP is allowed only for local/loopback hosts; remote backend URLs require HTTPS.
+- Only `alt`, `aria-label`, and `title` may change. The tag and children must remain unchanged.
 
-Applies a waiting proposal only if the original document is still open, saved, unchanged, and its original range still contains the selected element.
+## Review and apply behavior
 
-### Access Guardian: Reject Reviewed Fix
-
-Discards the waiting proposal without editing the file.
-
-## AI and privacy behavior
-
-- The extension sends only the selected element, rule ID, and finding description.
-- It does not read or send the workspace, unrelated files, screenshots, terminal data, or API keys.
-- The backend request requires consent and sends the AI request through the configured provider.
-- Provider/model changes invalidate a request generated after a consent prompt.
-- Remote URLs require HTTPS. HTTP is permitted only for localhost.
-- The backend and extension validate proposed HTML and only permit changes to `alt`, `aria-label`, and `title`.
-- The proposed change must keep the original tag and children unchanged.
-
-## Review and application
-
-The diff is the complete original document beside the complete proposed document. Applying a proposal:
-
-- Modifies only the exact selected range.
-- Leaves the document unsaved.
-- Adds a normal VS Code Undo operation.
-- Does not save or rescan files.
-- Is refused if the document or disk file changed after generation.
+The native VS Code diff shows the complete original and proposed document. Applying is unsaved and leaves normal Undo history. The proposal is refused if the document is dirty, the version/text/range changed, or the on-disk snapshot changed.
 
 ## Known limitations
 
-- The extension does not map an externally scanned URL to a local source file.
-- It processes one element at a time.
-- It does not edit multiple files or run terminal commands.
-- It does not search findings or workspace symbols automatically.
-- HTML string validation is conservative and may reject unusual markup.
-- AI proposals are suggestions; developers must verify semantics and accessibility manually.
-- This prototype has no authentication or multi-user isolation.
+- No automatic public-page-to-source mapping.
+- No multi-file edits or terminal commands.
+- Conservative HTML validation may reject unusual markup.
+- Runtime behavior in VS Code's Extension Development Host requires manual verification.
+- The project has no authentication or tenant isolation.
 
 ## Testing
 
-From this directory:
+JavaScript pure validation tests:
 
 ```bash
+cd vscode-extension
 npm test
 ```
 
-The tests cover URL validation, HTML element/replacement restrictions, request construction, and stale proposal rules through their pure validation module.
+Python remediation tests:
+
+```bash
+python -m unittest tests/test_fix_validation.py
+```
+
+VS Code activation, command, network, consent, diff, apply, reject, and stale-document behavior are not covered by these unit tests and require manual Extension Development Host testing.

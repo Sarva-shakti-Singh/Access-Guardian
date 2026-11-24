@@ -30,28 +30,48 @@ class _FirstTag(HTMLParser):
         self.raw: str | None = None
         self.stack: list[str] = []
         self.complete = False
+        self.extra_content = False
 
     def handle_starttag(self, tag, attrs):
+        name = tag.lower()
         if self.tag is None:
-            self.tag, self.attrs, self.raw = tag.lower(), dict(attrs), self.get_starttag_text()
-            if tag.lower() not in VOID_ELEMENTS:
-                self.stack.append(tag.lower())
-        elif tag.lower() not in VOID_ELEMENTS:
-            self.stack.append(tag.lower())
+            names: set[str] = set()
+            normalized: dict[str, str | None] = {}
+            for attr_name, value in attrs:
+                attr_name = attr_name.lower()
+                if attr_name in names:
+                    raise AIError("Element contains duplicate attributes")
+                names.add(attr_name)
+                normalized[attr_name] = value
+            self.tag, self.attrs, self.raw = name, normalized, self.get_starttag_text()
+            if name not in VOID_ELEMENTS:
+                self.stack.append(name)
+            else:
+                self.complete = True
+        elif self.complete:
+            self.extra_content = True
+        elif name not in VOID_ELEMENTS:
+            self.stack.append(name)
 
-    def handle_startendtag(self, tag, attrs):
-        if self.tag is None:
-            self.tag, self.attrs, self.raw = tag.lower(), dict(attrs), self.get_starttag_text()
+    handle_startendtag = handle_starttag
 
     def handle_endtag(self, tag):
-        if not self.stack:
+        name = tag.lower()
+        if self.complete:
+            self.extra_content = True
             return
-        tag = tag.lower()
-        if self.stack[-1] != tag:
+        if not self.stack:
+            self.extra_content = True
+            return
+        if self.stack[-1] != name:
             raise AIError("Element contains mismatched closing tags")
         self.stack.pop()
         if not self.stack:
             self.complete = True
+
+    def handle_data(self, data):
+        if self.complete and data.strip():
+            self.extra_content = True
 
 
 def _split(element: str) -> tuple[str, dict, str]:
@@ -71,41 +91,51 @@ def _split(element: str) -> tuple[str, dict, str]:
         raise AIError("Element must start with an HTML start tag")
 
     if p.tag in VOID_ELEMENTS:
-        if s[len(p.raw):].strip():
+        tail = s[len(p.raw):].strip()
+        if tail:
             raise AIError("Selection contains content after a void element")
         return p.tag, p.attrs, ""
 
     if not p.complete:
         raise AIError("Element must have a complete closing tag")
+    if p.extra_content:
+        raise AIError("Selection must contain exactly one complete HTML element")
 
-    raw_end = s.find(p.raw) + len(p.raw)
-    tail = s[raw_end:]
-    # Require the first element to end after all nested content and before no extra sibling.
-    if tail and not tail.rstrip().endswith(f"</{p.tag}>"):
+    tail = s[len(p.raw):]
+    closing = f"</{p.tag}>"
+    if not tail.rstrip().endswith(closing):
         raise AIError("Element must be one complete element")
     return p.tag, p.attrs, tail
 
 
 def validate_replacement(original: str, replacement: str) -> str:
     """Return the cleaned replacement or raise AIError when it exceeds the allowed change."""
-    if not replacement or len(replacement) > 5000:
+    if not isinstance(replacement, str) or not replacement.strip() or len(replacement) > 5000:
         raise AIError("Replacement has an invalid length")
+
     o_tag, o_attrs, o_rest = _split(original)
     n_tag, n_attrs, n_rest = _split(replacement)
     if o_tag != n_tag or o_rest != n_rest:
         raise AIError("Replacement changed the element tag or its children")
-    frozen = lambda a: {k: v for k, v in a.items() if k not in ALLOWED_ATTRS}  # noqa: E731
+
+    frozen = lambda attrs: {name: value for name, value in attrs.items() if name not in ALLOWED_ATTRS}  # noqa: E731
     if frozen(o_attrs) != frozen(n_attrs):
         raise AIError("Replacement changed attributes outside the allowed set")
+
     changed = False
-    for k in ALLOWED_ATTRS:
-        new = n_attrs.get(k)
-        if new is None:
-            continue
-        if len(new) > 150 or "<" in new or ">" in new or not new.strip():
-            raise AIError("Replacement attribute value is not acceptable")
-        if new != o_attrs.get(k):
+    for name in ALLOWED_ATTRS:
+        old = o_attrs.get(name)
+        new = n_attrs.get(name)
+        if old != new:
+            if new is None:
+                raise AIError("Replacement cannot remove an existing accessible-name attribute")
+            if len(new) > 150 or "<" in new or ">" in new or not new.strip():
+                raise AIError("Replacement attribute value is not acceptable")
             changed = True
+        elif new is not None:
+            if len(new) > 150 or "<" in new or ">" in new or not new.strip():
+                raise AIError("Replacement attribute value is not acceptable")
+
     if not changed:
         raise AIError("Replacement does not add an accessible name")
     return replacement.strip()
@@ -114,8 +144,10 @@ def validate_replacement(original: str, replacement: str) -> str:
 def propose(base_url: str, model: str, api_key: str, rule_id: str, message: str, element: str, context: str = "") -> str:
     data = chat_json(
         base_url, model, api_key,
-        [{"role": "system", "content": SYSTEM_PROMPT},
-         {"role": "user", "content": f"Rule: {rule_id}\nProblem: {message}\nPage context: {context}\nElement:\n{element}"}],
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"Rule: {rule_id}\nProblem: {message}\nPage context: {context}\nElement:\n{element}"},
+        ],
     )
     replacement = data.get("replacement")
     if not isinstance(replacement, str):

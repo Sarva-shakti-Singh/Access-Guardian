@@ -8,9 +8,11 @@ function validateBackendUrl(value) {
   let url;
   try { url = new URL(value); }
   catch { throw new Error("Access Guardian API URL is invalid. Check the accessGuardian.backendUrl setting."); }
+
   const hostname = url.hostname.toLowerCase();
-  const local = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
-  if ((url.protocol !== "https:" && !(url.protocol === "http:" && local)) ||
+  const isIpv4Loopback = /^127(?:\.\d{1,3}){3}$/.test(hostname);
+  const isLoopback = hostname === "localhost" || hostname === "::1" || hostname === "[::1]" || isIpv4Loopback;
+  if ((url.protocol !== "https:" && !(url.protocol === "http:" && isLoopback)) ||
       url.username || url.password || url.search || url.hash) {
     throw new Error("Use HTTPS for remote APIs. HTTP is allowed only for localhost; credentials, query strings, and fragments are not allowed.");
   }
@@ -64,6 +66,7 @@ function scanTags(text) {
 function validateCompleteHtmlElement(element) {
   if (typeof element !== "string" || !element.trim()) throw new Error("Selection is empty");
   const text = element.trim();
+  if (/^<!--|^<!|^<\?/i.test(text)) throw new Error("Selection must begin with the opening element tag");
   if (!/^<[a-zA-Z]/.test(text)) throw new Error("Selection must begin with the opening element tag");
   const tags = scanTags(text);
   if (!tags.length || tags[0].closing) throw new Error("Selection must start with an opening HTML tag");
@@ -104,10 +107,14 @@ function parseElement(element) {
   let index = tagMatch[0].length;
   while (index < startTag.length) {
     while (/\s/.test(startTag[index] || "")) index += 1;
-    if (index >= startTag.length || startTag[index] === "/") break;
+    if (index >= startTag.length) break;
+    if (startTag[index] === "/") {
+      if (!/^\/\s*$/.test(startTag.slice(index))) throw new Error("Malformed closing syntax in HTML start tag");
+      break;
+    }
     const attrMatch = /^[^\s=/>]+/.exec(startTag.slice(index));
     if (!attrMatch) throw new Error("Malformed HTML attribute");
-    const name = attrMatch[0].toLowerCase();
+    const name = attrMatch[0].toLowerEqual ? attrMatch[0].toLowerEqual() : attrMatch[0].toLowerCase();
     if (attributes.has(name)) throw new Error("Duplicate HTML attribute");
     index += attrMatch[0].length;
     while (/\s/.test(startTag[index] || "")) index += 1;
@@ -146,7 +153,8 @@ function validateReplacement(original, replacement) {
     const old = before.attributes.get(name);
     const value = after.attributes.get(name);
     if (old !== value) {
-      if (typeof value !== "string" || !value.trim() || value.length > 150 || /[<>]/.test(value)) throw new Error("The proposal contains an invalid accessible-name attribute.");
+      if (value == null) throw new Error("The proposal cannot remove an existing accessible-name attribute.");
+      if (!value.trim() || value.length > 150 || /[<>]/.test(value)) throw new Error("The proposal contains an invalid accessible-name attribute.");
       changed = true;
     }
   }
@@ -158,4 +166,27 @@ function buildFixRequest(ruleId, message, element, provider, model) {
   return { consent_to_send_context: true, rule_id: ruleId, message, element, context: "", expected_provider: provider, expected_model: model };
 }
 
-module.exports = { ALLOWED_ATTRIBUTES, validateBackendUrl, validateCompleteHtmlElement, parseElement, validateReplacement, buildFixRequest };
+function diskSnapshotsEqual(first, second) {
+  if (!first || !second || first.length !== second.length) return false;
+  for (let i = 0; i < first.length; i += 1) if (first[i] !== second[i]) return false;
+  return true;
+}
+
+function validateStaleProposalState({ isDirty, documentVersion, expectedVersion, currentText, expectedText, currentRangeText, expectedRangeText, diskSnapshot, diskNow }) {
+  if (isDirty) throw new Error("The file became unsaved after the proposal was prepared.");
+  if (documentVersion !== expectedVersion) throw new Error("The document version changed after the proposal was prepared.");
+  if (currentText !== expectedText) throw new Error("The document text changed after the proposal was prepared.");
+  if (currentRangeText !== expectedRangeText) throw new Error("The selected range changed after the proposal was prepared.");
+  if (!diskSnapshotsEqual(diskSnapshot, diskNow)) throw new Error("The saved file changed after the proposal was prepared.");
+}
+
+module.exports = {
+  ALLOWED_ATTRIBUTES,
+  validateBackendUrl,
+  validateCompleteHtmlElement,
+  parseElement,
+  validateReplacement,
+  buildFixRequest,
+  diskSnapshotsEqual,
+  validateStaleProposalState,
+};

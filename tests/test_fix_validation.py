@@ -1,4 +1,3 @@
-"""Server-side constrained remediation proposal validation tests."""
 import unittest
 
 from backend.app.services.ai.fix import AIError, validate_replacement
@@ -24,10 +23,15 @@ class FixValidationTests(unittest.TestCase):
         with self.assertRaises(AIError):
             validate_replacement('<button class="ok"></button>', '<button class="changed" aria-label="Save"></button>')
 
-    def test_rejects_incomplete_and_duplicate_root_markup(self):
-        for original in ('<button>Save', '<button></button><button></button>'):
+    def test_rejects_incomplete_extra_and_duplicate_markup(self):
+        for original in ('<button>Save', '<button></button><button></button>', '<button data-x="1" data-x="2"></button>'):
             with self.subTest(original=original), self.assertRaises(AIError):
                 validate_replacement(original, '<button aria-label="Save">Save</button>')
+
+    def test_rejects_removing_accessible_name_attribute(self):
+        original = '<button alt="Save"></button>'
+        with self.assertRaises(AIError):
+            validate_replacement(original, '<button></button>')
 
 
 if __name__ == "__main__":
