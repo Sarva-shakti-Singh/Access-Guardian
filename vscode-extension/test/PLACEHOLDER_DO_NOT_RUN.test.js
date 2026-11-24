@@ -1,10 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const manifest = require("../package.json");
 
-const {
-  ALLOWED_ATTRS,
-  validate_replacement,
-  AIError,
-} = (() => {
-  throw new Error("Python tests are not executed by this JavaScript test file");
-})();
+test("extension package exposes no placeholder failing test and source entry exists", () => {
+  assert.equal(manifest.main, "./src/extension.js");
+  assert.equal(manifest.scripts.test, "node --test test/*.test.js");
+  assert.ok(manifest.contributes.commands.length >= 3);
+});

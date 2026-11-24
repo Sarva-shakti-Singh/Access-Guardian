@@ -2,7 +2,7 @@
   "name": "access-guardian-fix-assistant",
   "displayName": "Access Guardian Fix Assistant",
   "description": "Prepare accessibility fixes for developer-selected HTML with an approval-gated diff.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "access-guardian",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
@@ -30,15 +30,13 @@
         "accessGuardian.apiBaseUrl": {
           "type": "string",
           "default": "",
-          "markdownDeprecationMessage": "Deprecated: use `accessGuardian.backendUrl` instead.",
-          "description": "Deprecated compatibility setting for the Access Guardian API URL.",
+          "markdownDeprecationMessage": "Deprecated; use accessGuardian.backendUrl.",
+          "description": "Deprecated compatibility setting.",
           "scope": "window"
         }
       }
     }
   },
-  "scripts": {
-    "test": "node --test test/*.test.js"
-  },
+  "scripts": { "test": "node --test test/*.test.js" },
   "devDependencies": {}
 }
