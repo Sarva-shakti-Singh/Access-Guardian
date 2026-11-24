@@ -1,3 +1,4 @@
+"""Server-side constrained remediation proposal validation tests."""
 import unittest
 
 from backend.app.services.ai.fix import AIError, validate_replacement
@@ -9,17 +10,24 @@ class FixValidationTests(unittest.TestCase):
         replacement = '<button class="ok" aria-label="Save item"><span>Save</span></button>'
         self.assertEqual(validate_replacement(original, replacement), replacement)
 
-    def test_rejects_tag_and_children_changes(self):
+    def test_rejects_tag_children_and_extra_sibling_changes(self):
         original = '<button class="ok"><span>Save</span></button>'
-        with self.assertRaises(AIError):
-            validate_replacement(original, '<a class="ok" aria-label="Save item"><span>Save</span></a>')
-        with self.assertRaises(AIError):
-            validate_replacement(original, '<button class="ok" aria-label="Save item"><b>Save</b></button>')
+        for replacement in (
+            '<a class="ok" aria-label="Save item"><span>Save</span></a>',
+            '<button class="ok" aria-label="Save item"><b>Save</b></button>',
+            '<button class="ok" aria-label="Save item"><span>Save</span></button><script>x</script>',
+        ):
+            with self.subTest(replacement=replacement), self.assertRaises(AIError):
+                validate_replacement(original, replacement)
 
     def test_rejects_unrelated_attribute_changes(self):
-        original = '<button class="ok"><span>Save</span></button>'
         with self.assertRaises(AIError):
-            validate_replacement(original, '<button class="changed" aria-label="Save item"><span>Save</span></button>')
+            validate_replacement('<button class="ok"></button>', '<button class="changed" aria-label="Save"></button>')
+
+    def test_rejects_incomplete_and_duplicate_root_markup(self):
+        for original in ('<button>Save', '<button></button><button></button>'):
+            with self.subTest(original=original), self.assertRaises(AIError):
+                validate_replacement(original, '<button aria-label="Save">Save</button>')
 
 
 if __name__ == "__main__":

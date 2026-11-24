@@ -20,17 +20,21 @@ const RULES = [
   { id: "select-name", label: "Select control missing accessible name" },
   { id: "aria-input-field-name", label: "ARIA input missing accessible name" },
 ];
-
 let pendingFix = null;
 
 function providerUrl() {
   const config = vscode.workspace.getConfiguration("accessGuardian");
-  const configured = config.get("backendUrl") || config.get("apiBaseUrl") || "http://127.0.0.1:8000";
-  try {
-    return validateBackendUrl(configured);
-  } catch (error) {
-    throw new Error(error.message);
-  }
+  const configured = config.get("backendUrl");
+  const legacy = config.get("apiBaseUrl");
+  const value = (!configured || (configured === "http://127.0.0.1:8000" && legacy))
+    ? (legacy || "http://127.0.0.1:8000") : configured;
+  return validateBackendUrl(value);
+}
+
+function endpointUrl(base, endpoint) {
+  const url = new URL(base.href);
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/${endpoint.replace(/^\/+/, "")}`;
+  return url;
 }
 
 function validateWorkspaceDocument(document) {
@@ -41,9 +45,7 @@ function validateWorkspaceDocument(document) {
     throw new Error("Save the selected document before preparing a fix. Unsaved changes may not be transmitted safely.");
   }
   const folder = vscode.workspace.getWorkspaceFolder(document.uri);
-  if (!folder) {
-    throw new Error("The selected file is outside the current VS Code workspace.");
-  }
+  if (!folder) throw new Error("The selected file is outside the current VS Code workspace.");
 
   let workspacePath;
   let selectedPath;
@@ -53,7 +55,6 @@ function validateWorkspaceDocument(document) {
   } catch {
     throw new Error("The workspace or selected file could not be resolved on disk.");
   }
-
   const relative = path.relative(workspacePath, selectedPath);
   if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error("The selected file is outside the current VS Code workspace.");
@@ -70,15 +71,13 @@ async function requestJson(url, options = {}) {
       const detail = typeof body.detail === "string" ? body.detail : `${response.status} ${response.statusText}`;
       throw new Error(detail);
     }
-    if (!body || typeof body !== "object") throw new Error("The Access Guardian API returned an invalid response.");
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new Error("The Access Guardian API returned an invalid response.");
+    }
     return body;
   } catch (error) {
-    if (error && error.name === "AbortError") {
-      throw new Error("The AI request timed out. Check the provider and try again.");
-    }
-    if (error instanceof TypeError) {
-      throw new Error("Could not reach the Access Guardian API. Start the backend and try again.");
-    }
+    if (error?.name === "AbortError") throw new Error("The AI request timed out. Check the provider and try again.");
+    if (error instanceof TypeError) throw new Error("Could not reach the Access Guardian API. Start the backend and try again.");
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -88,33 +87,33 @@ async function requestJson(url, options = {}) {
 function selectionRange(editor) {
   const selection = editor.selection;
   if (selection.isEmpty) throw new Error("Select one complete HTML element in the editor first.");
-
   const document = editor.document;
   const selected = document.getText(selection);
   const trimmed = selected.trim();
   if (!trimmed) throw new Error("Select one complete HTML element in the editor first.");
   if (trimmed.length > 5000) throw new Error("Select a single HTML element no longer than 5000 characters.");
-
-  try {
-    validateCompleteHtmlElement(trimmed);
-  } catch (error) {
-    throw new Error(`The selection must contain exactly one complete HTML element. ${error.message}`);
-  }
+  try { validateCompleteHtmlElement(trimmed); }
+  catch (error) { throw new Error(`The selection must contain exactly one complete HTML element. ${error.message}`); }
 
   const leading = selected.length - selected.trimStart().length;
   const trailing = selected.length - selected.trimEnd().length;
-  const absoluteStart = document.offsetAt(selection.start) + leading;
-  const absoluteEnd = document.offsetAt(selection.end) - trailing;
-  const range = new vscode.Range(document.positionAt(absoluteStart), document.positionAt(absoluteEnd));
+  const start = document.offsetAt(selection.start) + leading;
+  const end = document.offsetAt(selection.end) - trailing;
+  const range = new vscode.Range(document.positionAt(start), document.positionAt(end));
   return { range, original: document.getText(range) };
 }
 
-async function selectRule() {
-  const choice = await vscode.window.showQuickPick(
-    RULES.map((rule) => ({ label: rule.label, description: rule.id, ruleId: rule.id })),
-    { title: "Choose the detected accessibility rule", placeHolder: "Choose the finding that matches this selected HTML" },
-  );
-  return choice && choice.ruleId;
+async function assertSnapshotUnchanged(document, range, original, version, text, diskSnapshot) {
+  if (document.isDirty || document.version !== version || document.getText() !== text || document.getText(range) !== original) {
+    throw new Error("The file changed after the proposal was prepared. No edit was applied; prepare a new proposal.");
+  }
+  const now = await vscode.workspace.fs.readFile(document.uri);
+  if (!Buffer.from(diskSnapshot).equals(Buffer.from(now))) {
+    throw new Error("The saved file changed after the proposal was prepared. No edit was applied; prepare a new proposal.");
+  }
+  if (document.isDirty || document.version !== version || document.getText() !== text || document.getText(range) !== original) {
+    throw new Error("The file changed while the proposal was being checked. No edit was applied; prepare a new proposal.");
+  }
 }
 
 async function applyPendingFix() {
@@ -122,40 +121,20 @@ async function applyPendingFix() {
     vscode.window.showInformationMessage("There is no Access Guardian fix waiting for review.");
     return;
   }
-
   const proposal = pendingFix;
   const { editor, document, range, original, replacement, documentVersion, baseDocumentText, diskSnapshot } = proposal;
-  validateWorkspaceDocument(document);
-
-  if (!vscode.workspace.textDocuments.includes(document) ||
-      document.version !== documentVersion ||
-      document.getText() !== baseDocumentText ||
-      document.getText(range) !== original) {
+  try {
+    validateWorkspaceDocument(document);
+    if (!vscode.workspace.textDocuments.includes(document)) throw new Error("The source document is no longer open. No edit was applied.");
+    await assertSnapshotUnchanged(document, range, original, documentVersion, baseDocumentText, diskSnapshot);
+    const applied = await editor.edit((builder) => builder.replace(range, replacement));
+    if (!applied) throw new Error("VS Code could not apply the edit. The file was not changed.");
     pendingFix = null;
-    throw new Error("The file changed after the proposal was prepared. No edit was applied; prepare a new proposal.");
-  }
-
-  const diskNow = await vscode.workspace.fs.readFile(document.uri);
-  if (!Buffer.from(diskSnapshot).equals(Buffer.from(diskNow))) {
+    vscode.window.showInformationMessage("Approved fix applied to the open editor buffer. Save the file when ready; use Undo to revert.");
+  } catch (error) {
     pendingFix = null;
-    throw new Error("The saved file changed after the proposal was prepared. No edit was applied; prepare a new proposal.");
+    throw error;
   }
-
-  if (document.isDirty) {
-    pendingFix = null;
-    throw new Error("Save the document and prepare a new proposal before applying this fix.");
-  }
-
-  if (document.version !== documentVersion || document.getText() !== baseDocumentText) {
-    pendingFix = null;
-    throw new Error("The file changed while the proposal was being checked. No edit was applied; prepare a new proposal.");
-  }
-
-  const applied = await editor.edit((builder) => builder.replace(range, replacement));
-  if (!applied) throw new Error("VS Code could not apply the edit. The file was not changed.");
-
-  pendingFix = null;
-  vscode.window.showInformationMessage("Approved fix applied to the open editor buffer. Save the file when ready; use Undo to revert.");
 }
 
 async function rejectPendingFix() {
@@ -165,6 +144,14 @@ async function rejectPendingFix() {
   }
   pendingFix = null;
   vscode.window.showInformationMessage("Proposed fix rejected. No file was changed.");
+}
+
+async function selectRule() {
+  const choice = await vscode.window.showQuickPick(
+    RULES.map((rule) => ({ label: rule.label, description: rule.id, ruleId: rule.id })),
+    { title: "Choose the detected accessibility rule", placeHolder: "Choose the finding that matches this selected HTML" },
+  );
+  return choice?.ruleId;
 }
 
 async function prepareFix() {
@@ -181,12 +168,15 @@ async function prepareFix() {
 
   const editor = vscode.window.activeTextEditor;
   if (!editor) throw new Error("Open a source file and select an HTML element first.");
-  validateWorkspaceDocument(editor.document);
+  const document = editor.document;
+  validateWorkspaceDocument(document);
   const { range, original } = selectionRange(editor);
+  const selectedVersion = document.version;
+  const selectedText = document.getText();
+  const selectedDisk = await vscode.workspace.fs.readFile(document.uri);
 
   const ruleId = await selectRule();
   if (!ruleId) return;
-
   const message = await vscode.window.showInputBox({
     title: "Describe the accessibility finding",
     prompt: "Use the finding message from Access Guardian. Do not include unrelated source or secrets.",
@@ -200,12 +190,12 @@ async function prepareFix() {
   let status;
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: "Access Guardian: checking AI configuration" },
-    async () => { status = await requestJson(new URL("/api/agent/status", api)); },
+    async () => { status = await requestJson(endpointUrl(api, "/api/agent/status")); },
   );
-
-  if (!status.configured || !status.provider || !status.model) {
-    throw new Error("No AI provider is configured. Configure the provider in the backend .env and restart the API.");
+  if (typeof status.configured !== "boolean" || (status.configured && (!status.provider || !status.model))) {
+    throw new Error("The Access Guardian backend returned an invalid AI status response.");
   }
+  if (!status.configured) throw new Error("No AI provider is configured. Configure the provider in the backend .env and restart the API.");
 
   const consent = await vscode.window.showInformationMessage(
     `Send the selected HTML and finding description to ${status.provider} (${status.model})?`,
@@ -214,40 +204,33 @@ async function prepareFix() {
   );
   if (consent !== "Send to AI") return;
 
-  const diskSnapshot = await vscode.workspace.fs.readFile(editor.document.uri);
-  const documentVersion = editor.document.version;
-  const baseDocumentText = editor.document.getText();
+  validateWorkspaceDocument(document);
+  await assertSnapshotUnchanged(document, range, original, selectedVersion, selectedText, selectedDisk);
   const requestBody = buildFixRequest(ruleId, message.trim(), original, status.provider, status.model);
-
   let apiResult;
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: "Access Guardian: generating an accessibility fix" },
     async () => {
-      apiResult = await requestJson(new URL("/api/agent/fix", api), {
+      apiResult = await requestJson(endpointUrl(api, "/api/agent/fix"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
     },
   );
-
-  if (!apiResult || typeof apiResult.replacement !== "string") {
-    throw new Error("The backend returned an invalid AI fix response.");
-  }
+  if (typeof apiResult.replacement !== "string") throw new Error("The backend returned an invalid AI fix response.");
   const replacement = validateReplacement(original, apiResult.replacement);
+  await assertSnapshotUnchanged(document, range, original, selectedVersion, selectedText, selectedDisk);
 
-  const proposedText =
-    baseDocumentText.slice(0, editor.document.offsetAt(range.start)) +
-    replacement +
-    baseDocumentText.slice(editor.document.offsetAt(range.end));
-
-  const preview = await vscode.workspace.openTextDocument({ language: editor.document.languageId, content: proposedText });
-  await vscode.commands.executeCommand("vscode.diff", editor.document.uri, preview.uri,
+  const start = document.offsetAt(range.start);
+  const end = document.offsetAt(range.end);
+  const proposedText = selectedText.slice(0, start) + replacement + selectedText.slice(end);
+  const preview = await vscode.workspace.openTextDocument({ language: document.languageId, content: proposedText });
+  await vscode.commands.executeCommand("vscode.diff", document.uri, preview.uri,
     "Access Guardian: Review Proposed Fix", { preview: false });
 
-  pendingFix = { editor, document: editor.document, range, original, replacement,
-    documentVersion, baseDocumentText, diskSnapshot };
-
+  pendingFix = { editor, document, range, original, replacement,
+    documentVersion: selectedVersion, baseDocumentText: selectedText, diskSnapshot: selectedDisk };
   const approval = await vscode.window.showInformationMessage(
     "Review the complete diff before deciding whether to apply this fix.",
     "Apply Fix", "Reject Fix", "Review Changes",
@@ -261,14 +244,12 @@ async function prepareFix() {
 
 function activate(context) {
   const register = (name, action) => vscode.commands.registerCommand(name, async () => {
-    try {
-      await action();
-    } catch (error) {
+    try { await action(); }
+    catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await vscode.window.showErrorMessage(`Access Guardian: ${message}`);
     }
   });
-
   context.subscriptions.push(
     register("accessGuardian.prepareFix", prepareFix),
     register("accessGuardian.applyReviewedFix", applyPendingFix),
@@ -277,14 +258,4 @@ function activate(context) {
 }
 
 function deactivate() {}
-
-module.exports = {
-  activate,
-  deactivate,
-  providerUrl,
-  validateWorkspaceDocument,
-  selectionRange,
-  applyPendingFix,
-  rejectPendingFix,
-  prepareFix,
-};
+module.exports = { activate, deactivate, providerUrl, validateWorkspaceDocument, selectionRange, applyPendingFix, rejectPendingFix, prepareFix };
