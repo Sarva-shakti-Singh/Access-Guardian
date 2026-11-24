@@ -35,6 +35,16 @@ ACCESS_GUARDIAN_AI_API_KEY=
 
 The extension never receives or stores API keys.
 
+For a remote OpenAI-compatible provider, use the base URL ending in `/v1`; the backend appends `/chat/completions` exactly once:
+
+```dotenv
+ACCESS_GUARDIAN_AI_BASE_URL=https://api.openai.com/v1
+ACCESS_GUARDIAN_AI_MODEL=gpt-5.4-mini
+ACCESS_GUARDIAN_AI_API_KEY=your-provider-key
+```
+
+Never commit or place the key in VS Code settings. The status endpoint never returns it.
+
 ## Commands
 
 - **Access Guardian: Prepare AI Fix for Selected HTML** — validate a saved workspace document and one complete element, ask for rule/context, confirm provider/model, request a fix, and open a diff.

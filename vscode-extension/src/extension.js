@@ -232,7 +232,10 @@ async function prepareFix() {
       (status.configured && (typeof status.provider !== "string" || !status.provider || typeof status.model !== "string" || !status.model))) {
     throw new Error("The Access Guardian backend returned an invalid AI status response.");
   }
-  if (!status.configured) throw new Error("No AI provider is configured. Configure the provider in the backend .env and restart the API.");
+  if (!status.configured) {
+    const detail = status.configuration_error ? ` ${status.configuration_error}.` : "";
+    throw new Error(`No usable AI provider is configured.${detail} Set ACCESS_GUARDIAN_AI_BASE_URL, ACCESS_GUARDIAN_AI_MODEL, and ACCESS_GUARDIAN_AI_API_KEY in the backend .env, then restart the API.`);
+  }
 
   const consent = await vscode.window.showInformationMessage(
     `Send the selected HTML and finding description to ${status.provider} (${status.model})?`,

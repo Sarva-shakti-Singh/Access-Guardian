@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { api } from "./api";
 import { ScanArt } from "./Art";
-import { downloadCsv } from "./reportDownloads";
+import { downloadCsv, downloadJson } from "./reportDownloads";
 import type { ScanRecord, Severity } from "./types";
 
 const SEVS: Severity[] = ["critical", "serious", "moderate", "minor"];
-const SAMPLE: Record<Severity, number> = { critical: 2, serious: 5, moderate: 3, minor: 2, unknown: 0 };
 const WEIGHTS: Record<Severity, number> = { critical: 10, serious: 5, moderate: 2, minor: 1, unknown: 0 };
 const ACTIVE = new Set(["queued", "crawling", "analyzing"]);
 
@@ -17,7 +16,7 @@ function fmtDuration(s: ScanRecord): string {
 }
 
 function statusLabel(s?: ScanRecord): { text: string; cls: string } {
-  if (!s) return { text: "Sample data", cls: "pill" };
+  if (!s) return { text: "No scan selected", cls: "pill" };
   if (ACTIVE.has(s.status)) return { text: `Scanning · ${s.status}`, cls: "pill run" };
   if (s.status === "complete") return { text: "Scan complete · review needed", cls: "pill ok" };
   if (s.status === "partial") return { text: "Partial scan · review needed", cls: "pill warn" };
@@ -29,9 +28,7 @@ export default function ReportCard({ scan }: { scan: ScanRecord | null }) {
   const [shotFailed, setShotFailed] = useState(false);
   const [exportError, setExportError] = useState("");
   const [exporting, setExporting] = useState(false);
-  const counts: Record<Severity, number> = scan
-    ? { critical: 0, serious: 0, moderate: 0, minor: 0, unknown: 0 }
-    : SAMPLE;
+  const counts: Record<Severity, number> = { critical: 0, serious: 0, moderate: 0, minor: 0, unknown: 0 };
   if (scan) for (const f of scan.findings) counts[f.severity] += 1;
   const total = SEVS.reduce((a, k) => a + counts[k], 0) + counts.unknown;
   const score = scan
@@ -54,6 +51,19 @@ export default function ReportCard({ scan }: { scan: ScanRecord | null }) {
     }
   }
 
+  async function exportJson() {
+    if (!scan) return;
+    setExportError("");
+    setExporting(true);
+    try {
+      downloadJson(scan, await api.listRemediations(scan.scan_id));
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const stats: [string, string][] = scan
     ? [
         ["Duration", fmtDuration(scan)],
@@ -62,12 +72,12 @@ export default function ReportCard({ scan }: { scan: ScanRecord | null }) {
         ["Findings", String(total)],
         ["AI analysis", scan.ai_analysis_status],
       ]
-    : [["Duration", "00:00:21"], ["Browser", "Chromium"], ["Pages", "3"], ["Findings", "12"], ["AI analysis", "sample"]];
+    : [["Duration", "—"], ["Browser", "—"], ["Pages", "—"], ["Findings", "—"], ["AI analysis", "Not started"]];
 
   return (
     <li className="tile wide report">
       <div className="rep-head">
-        <h2>{scan ? scan.title || scan.target_url : "Sample accessibility scan"}</h2>
+        <h2>{scan ? scan.title || scan.target_url : "Accessibility scan"}</h2>
         <span className={st.cls} role="status">{st.text}</span>
       </div>
       <dl className="stats">
@@ -90,6 +100,9 @@ export default function ReportCard({ scan }: { scan: ScanRecord | null }) {
             {exporting ? "Preparing CSV…" : "Download CSV"}
           </button>
           <button className="btn" onClick={() => window.print()}>Print / Save as PDF</button>
+          <button className="btn" onClick={() => void exportJson()} disabled={exporting}>
+            {exporting ? "Preparing JSON…" : "Download JSON"}
+          </button>
         </div>
       )}
       {exportError && <p className="err" role="alert">{exportError}</p>}

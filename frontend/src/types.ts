@@ -58,6 +58,7 @@ export interface AgentStatus {
   configured: boolean;
   provider: string | null;
   model: string | null;
+  configuration_error?: string | null;
 }
 
 export interface Remediation {

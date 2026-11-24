@@ -43,6 +43,29 @@ export function downloadSuggestedHtml(findingId: string, replacement: string): v
   );
 }
 
+export function downloadJson(scan: ScanRecord, remediations: Remediation[]): void {
+  const report = {
+    disclaimer: "Internal accessibility metric and automated findings are not a WCAG conformance score.",
+    scan: {
+      scan_id: scan.scan_id,
+      status: scan.status,
+      target_url: scan.target_url,
+      title: scan.title,
+      created_at: scan.created_at,
+      finished_at: scan.finished_at,
+      pages: scan.pages,
+    },
+    findings: scan.findings.map((finding) => ({
+      ...finding,
+      remediation: remediations.find((item) => item.finding_id === finding.finding_id) ?? null,
+    })),
+  };
+  download(
+    new Blob([JSON.stringify(report, null, 2)], { type: "application/json;charset=utf-8" }),
+    `access-guardian-${scan.scan_id}.json`,
+  );
+}
+
 function download(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

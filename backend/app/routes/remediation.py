@@ -33,6 +33,11 @@ def _provider():
         check_provider_url(s.ai_base_url)
     except AIError as exc:
         raise HTTPException(503, str(exc)) from exc
+    if s.ai_base_url.strip().lower().startswith("https://") and not s.ai_api_key.strip():
+        raise HTTPException(503, "ACCESS_GUARDIAN_AI_API_KEY is missing")
+    if not s.ai_api_key.strip() and s.ai_base_url.strip().lower().startswith("http://"):
+        # Loopback providers may be unauthenticated.
+        pass
     return s
 
 
@@ -49,6 +54,8 @@ def agent_status():
             check_provider_url(s.ai_base_url)
         except AIError as exc:
             configuration_error = str(exc)
+        if not configuration_error and s.ai_base_url.strip().lower().startswith("https://") and not s.ai_api_key.strip():
+            configuration_error = "ACCESS_GUARDIAN_AI_API_KEY is missing"
     configured = configuration_error is None
     return AIFixStatus(
         configured=configured,
@@ -62,11 +69,11 @@ def _propose(s, rule_id: str, message: str, element: str, context: str) -> str:
     try:
         return fix.propose(s.ai_base_url, s.ai_model, s.ai_api_key, rule_id, message, element, context)
     except AIError as exc:
-        text = str(exc)
-        # Provider/transport failures are an availability problem; shape/validation failures are unsafe output.
-        if "request failed" in text or "HTTPS" in text:
-            raise HTTPException(503, text) from exc
-        raise HTTPException(422, text) from exc
+        if exc.status_code in {400, 404}:
+            raise HTTPException(422, str(exc)) from exc
+        if exc.category in {"http", "timeout", "connection", "configuration"} or exc.status_code in {401, 403, 429, 500, 502, 503, 504}:
+            raise HTTPException(503, str(exc)) from exc
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.post("/api/agent/fix", response_model=AIFixResponse)

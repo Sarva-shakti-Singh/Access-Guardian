@@ -343,6 +343,7 @@ components:
         configured: {type: boolean}
         provider: {type: string, nullable: true, description: Sanitized provider endpoint; no credential}
         model: {type: string, nullable: true}
+        configuration_error: {type: string, nullable: true}
     AIFixRequest:
       type: object
       additionalProperties: false

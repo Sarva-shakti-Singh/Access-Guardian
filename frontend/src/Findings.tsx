@@ -149,14 +149,24 @@ function Proposal({ finding, agent }: { finding: Finding; agent: AgentStatus }) 
 export default function Findings({ findings, agent }: { findings: Finding[]; agent: AgentStatus | null }) {
   const [sev, setSev] = useState<"all" | Severity>("all");
   const [q, setQ] = useState("");
+  const [wcag, setWcag] = useState("all");
+  const [page, setPage] = useState("all");
+  const pages = useMemo(() => [...new Set(findings.map((finding) => finding.page_url))].sort(), [findings]);
+  const wcagCriteria = useMemo(() => [...new Set(findings.flatMap((finding) => finding.wcag))].sort(), [findings]);
+  const pageCounts = useMemo(() => pages.map((url) => ({
+    url,
+    total: findings.filter((finding) => finding.page_url === url).length,
+  })).sort((a, b) => b.total - a.total), [findings, pages]);
   const shown = useMemo(
     () =>
       findings.filter(
         (f) =>
           (sev === "all" || f.severity === sev) &&
-          (!q || `${f.rule_id} ${f.message} ${f.title ?? ""} ${f.selector ?? ""}`.toLowerCase().includes(q.toLowerCase())),
+          (wcag === "all" || f.wcag.includes(wcag)) &&
+          (page === "all" || f.page_url === page) &&
+          (!q || `${f.rule_id} ${f.message} ${f.title ?? ""} ${f.selector ?? ""} ${f.page_url} ${f.html_snippet ?? ""}`.toLowerCase().includes(q.toLowerCase())),
       ),
-    [findings, sev, q],
+    [findings, sev, q, wcag, page],
   );
 
   return (
@@ -172,37 +182,67 @@ export default function Findings({ findings, agent }: { findings: Finding[]; age
             <span className="sr-only">Filter by severity</span>
             <select value={sev} onChange={(e) => setSev(e.target.value as "all" | Severity)}>
               <option value="all">All severities</option>
-              {["critical", "serious", "moderate", "minor", "unknown"].map((s) => (
+              {["critical", "serious", "moderate", "minor"].map((s) => (
                 <option key={s}>{s}</option>
               ))}
+            </select>
+          </label>
+          <label>
+            <span className="sr-only">Filter by WCAG criterion</span>
+            <select value={wcag} onChange={(event) => setWcag(event.target.value)}>
+              <option value="all">All WCAG criteria</option>
+              {wcagCriteria.map((criterion) => <option key={criterion} value={criterion}>WCAG {criterion}</option>)}
+            </select>
+          </label>
+          <label>
+            <span className="sr-only">Filter by page</span>
+            <select value={page} onChange={(event) => setPage(event.target.value)}>
+              <option value="all">All pages</option>
+              {pages.map((url) => <option key={url} value={url}>{url}</option>)}
             </select>
           </label>
         </div>
       </div>
       {findings.length === 0 && <p className="muted">No findings were reported. That is not a conformance claim; manual review is still needed.</p>}
+      {pageCounts.length > 0 && (
+        <div className="page-summary" aria-label="Page-level finding summary">
+          {pageCounts.map((item) => (
+            <button key={item.url} className="page-summary-item" type="button" onClick={() => setPage(item.url)}>
+              <span>{item.url}</span><b>{item.total}</b>
+            </button>
+          ))}
+        </div>
+      )}
       <ul className="flist">
         {shown.map((f) => (
           <li key={f.finding_id} id={`finding-${f.finding_id}`} className="finding">
-            <div className="frow">
-              <span className={`sev ${f.severity}`}>{f.severity}</span>
-              <b>{f.title || f.rule_id}</b>
-              <span className={`conf ${f.confidence}`}>{f.confidence === "confirmed" ? "confirmed" : "potential · human review"}</span>
-            </div>
-            <p>{f.message}</p>
+            <details>
+              <summary>
+                <span className="frow">
+                  <span className={`sev ${f.severity}`}>{f.severity}</span>
+                  <b>{f.title || f.rule_id}</b>
+                  <span className={`conf ${f.confidence}`}>{f.confidence === "confirmed" ? "confirmed" : "potential · human review"}</span>
+                </span>
+                <span className="finding-summary-message">{f.message}</span>
+              </summary>
             <p className="friendly"><b>In plain language:</b> {friendlyExplanation(f)}</p>
             <p className="meta">
               <code>{f.rule_id}</code> · {f.source}
               {f.wcag.length ? ` · WCAG ${f.wcag.join(", ")}` : ""}
             </p>
+            {f.page_url && <p className="meta"><b>Page:</b> {f.page_url}</p>}
             {f.selector && <p className="meta"><code>{f.selector}</code></p>}
             {f.html_snippet && <pre className="snip">{f.html_snippet}</pre>}
             {agent?.configured && f.html_snippet && f.source === "axe" && FIXABLE.has(f.rule_id) && <Proposal finding={f} agent={agent} />}
+            </details>
           </li>
         ))}
       </ul>
       {!agent?.configured && findings.length > 0 && (
         <p className="muted">
-          Fix proposals need a local Ollama server and the configured model. Start Ollama and run <code>ollama pull qwen2.5-coder:7b</code>.
+          {agent?.configuration_error
+            ? `AI remediation unavailable: ${agent.configuration_error}`
+            : "AI remediation is disabled. Configure the provider in the backend .env and restart the API."}
         </p>
       )}
     </section>
