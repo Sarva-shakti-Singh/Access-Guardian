@@ -50,7 +50,7 @@ class ScanRecord(BaseModel):
     title: Optional[str] = None
     page_url: Optional[str] = None
     pages_scanned: int = 0
-    score: Optional[int] = None  # always null: no conformance score is computed
+    score: Optional[int] = None
     ai_analysis_status: Literal["disabled", "pending", "complete", "partial", "unavailable"] = "disabled"
     findings: list[Finding] = []
     finding_count: int = 0
@@ -71,12 +71,12 @@ class AIFixRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     consent_to_send_context: Literal[True]
-    rule_id: str = Field(max_length=80)
-    message: str = Field(max_length=1000)
-    element: str = Field(max_length=5000)
+    rule_id: str = Field(min_length=1, max_length=80)
+    message: str = Field(min_length=1, max_length=1000)
+    element: str = Field(min_length=1, max_length=5000)
     context: str = Field(default="", max_length=2000)
-    expected_provider: str = Field(max_length=500)
-    expected_model: str = Field(max_length=200)
+    expected_provider: str = Field(min_length=1, max_length=500)
+    expected_model: str = Field(min_length=1, max_length=200)
 
 
 class AIFixResponse(BaseModel):

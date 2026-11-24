@@ -2,15 +2,11 @@
   "name": "access-guardian-fix-assistant",
   "displayName": "Access Guardian Fix Assistant",
   "description": "Prepare accessibility fixes for developer-selected HTML with an approval-gated diff.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "access-guardian",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "main": "./extension.js",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "main": "./src/extension.js",
   "activationEvents": [
     "onCommand:accessGuardian.prepareFix",
     "onCommand:accessGuardian.applyReviewedFix",
@@ -18,28 +14,31 @@
   ],
   "contributes": {
     "commands": [
-      {
-        "command": "accessGuardian.prepareFix",
-        "title": "Access Guardian: Prepare AI Fix for Selected HTML"
-      },
-      {
-        "command": "accessGuardian.applyReviewedFix",
-        "title": "Access Guardian: Apply Reviewed Fix"
-      },
-      {
-        "command": "accessGuardian.rejectReviewedFix",
-        "title": "Access Guardian: Reject Reviewed Fix"
-      }
+      { "command": "accessGuardian.prepareFix", "title": "Access Guardian: Prepare AI Fix for Selected HTML" },
+      { "command": "accessGuardian.applyReviewedFix", "title": "Access Guardian: Apply Reviewed Fix" },
+      { "command": "accessGuardian.rejectReviewedFix", "title": "Access Guardian: Reject Reviewed Fix" }
     ],
     "configuration": {
       "title": "Access Guardian",
       "properties": {
-        "accessGuardian.apiBaseUrl": {
+        "accessGuardian.backendUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8000",
-          "description": "Access Guardian API URL. HTTP is allowed only on localhost; remote services must use HTTPS."
+          "markdownDescription": "Access Guardian backend URL. HTTP is allowed only for localhost; remote endpoints must use HTTPS.",
+          "scope": "window"
+        },
+        "accessGuardian.apiBaseUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDeprecationMessage": "Deprecated: use `accessGuardian.backendUrl` instead.",
+          "description": "Deprecated compatibility setting for the Access Guardian API URL.",
+          "scope": "window"
         }
       }
     }
-  }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {}
 }

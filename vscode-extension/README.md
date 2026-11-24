@@ -1,27 +1,100 @@
-# Access Guardian Fix Assistant (VS Code prototype)
+# Access Guardian Fix Assistant
 
-This extension bridges a developer-selected HTML element to Access Guardian's constrained AI proposal endpoint. It does not search the workspace, map a deployed URL to source, run terminal commands, or grant the AI filesystem access.
+This extension sends one developer-selected HTML element to the existing Access Guardian FastAPI backend for a constrained AI remediation proposal.
 
-## Run from this repository
+## Requirements
+
+- VS Code 1.85 or newer
+- Access Guardian backend running locally or at an HTTPS endpoint
+- AI provider configured on the backend
+- No additional VS Code extension npm dependencies
+
+## Install or develop locally
 
 1. Open the Access Guardian repository in VS Code.
-2. Configure and start the FastAPI backend. Set `ACCESS_GUARDIAN_AI_BASE_URL`, `ACCESS_GUARDIAN_AI_MODEL`, and `ACCESS_GUARDIAN_AI_API_KEY` in the backend `.env`. Use a real API key locally; never commit it or paste it into chat.
-3. Open the Run and Debug view and start **Access Guardian Extension**. VS Code launches an Extension Development Host window.
-4. In that window, open a saved HTML/source file inside the workspace and select one complete HTML element.
-5. Run **Access Guardian: Prepare AI Fix for Selected HTML** from the Command Palette.
-6. Choose the matching rule and enter its finding description. Confirm the provider consent prompt to send only the selected element and finding description.
-7. Review the complete before/after diff. Choose **Apply Fix** to edit the selected range or **Reject Fix** to leave the file unchanged. Choose **Review Changes** to leave the diff open, then use **Access Guardian: Apply Reviewed Fix** or **Access Guardian: Reject Reviewed Fix** from the Command Palette.
-8. The approved edit stays unsaved in the editor. Save it yourself, or use VS Code Undo to revert it. Rescan manually in the dashboard.
+2. Run **Tasks: Run Task** and select **Setup (first run)**, or configure the backend manually.
+3. Configure the backend URL:
+   - Open VS Code Settings.
+   - Set `accessGuardian.backendUrl` to `http://127.0.0.1:8000` for local development.
+   - For remote backends, use HTTPS.
+4. Start the backend:
 
-Configure `accessGuardian.apiBaseUrl` in VS Code settings to point to a different Access Guardian API. Remote API URLs must use HTTPS; HTTP is accepted only for localhost.
+```bash
+.venv/bin/python -m uvicorn backend.app.main:app
+```
 
-## Safety and scope
+On Windows, use `.venv\Scripts\python.exe -m uvicorn backend.app.main:app`.
 
-- Both sending context to the AI and applying its proposal require separate, explicit approval.
-- Only a selected file inside the current workspace can be edited. The AI receives the selected snippet, not the workspace.
-- The extension uses the backend's constrained accessible-name rules and replacement validation.
-- The full document is diffed before approval. The extension checks the document version, content, selected range, and on-disk file snapshot again before editing.
-- Changes are unsaved and are part of the normal VS Code Undo history. The extension does not save files or run commands.
-- This is a developer-assisted prototype. A public-site finding must be mapped to source by the developer. It is not yet a multi-file agent or an automatic verification loop.
+5. Open **Run and Debug**, select **Access Guardian Extension**, and press F5. An Extension Development Host window opens.
 
-No separate npm dependencies are required; VS Code provides the extension API.
+## Configure AI
+
+Set these variables in `.env` and restart the backend:
+
+```dotenv
+ACCESS_GUARDIAN_AI_BASE_URL=http://127.0.0.1:11434/v1
+ACCESS_GUARDIAN_AI_MODEL=qwen2.5-coder:7b
+ACCESS_GUARDIAN_AI_API_KEY=
+```
+
+The extension never stores or sends API keys. They remain on the backend.
+
+## Commands
+
+### Access Guardian: Prepare AI Fix for Selected HTML
+
+1. Open and save an HTML/source file in the current workspace.
+2. Select exactly one complete HTML element.
+3. Run the command from the Command Palette.
+4. Choose the finding rule and enter the finding description.
+5. Review the provider/model and explicitly choose **Send to AI**.
+6. Review the native VS Code diff.
+7. Choose **Apply Fix**, **Reject Fix**, or **Review Changes**.
+
+### Access Guardian: Apply Reviewed Fix
+
+Applies a waiting proposal only if the original document is still open, saved, unchanged, and its original range still contains the selected element.
+
+### Access Guardian: Reject Reviewed Fix
+
+Discards the waiting proposal without editing the file.
+
+## AI and privacy behavior
+
+- The extension sends only the selected element, rule ID, and finding description.
+- It does not read or send the workspace, unrelated files, screenshots, terminal data, or API keys.
+- The backend request requires consent and sends the AI request through the configured provider.
+- Provider/model changes invalidate a request generated after a consent prompt.
+- Remote URLs require HTTPS. HTTP is permitted only for localhost.
+- The backend and extension validate proposed HTML and only permit changes to `alt`, `aria-label`, and `title`.
+- The proposed change must keep the original tag and children unchanged.
+
+## Review and application
+
+The diff is the complete original document beside the complete proposed document. Applying a proposal:
+
+- Modifies only the exact selected range.
+- Leaves the document unsaved.
+- Adds a normal VS Code Undo operation.
+- Does not save or rescan files.
+- Is refused if the document or disk file changed after generation.
+
+## Known limitations
+
+- The extension does not map an externally scanned URL to a local source file.
+- It processes one element at a time.
+- It does not edit multiple files or run terminal commands.
+- It does not search findings or workspace symbols automatically.
+- HTML string validation is conservative and may reject unusual markup.
+- AI proposals are suggestions; developers must verify semantics and accessibility manually.
+- This prototype has no authentication or multi-user isolation.
+
+## Testing
+
+From this directory:
+
+```bash
+npm test
+```
+
+The tests cover URL validation, HTML element/replacement restrictions, request construction, and stale proposal rules through their pure validation module.
